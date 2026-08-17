@@ -1,5 +1,7 @@
 # DevScope
 
+[![CI](https://github.com/15273/devscope-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/15273/devscope-bridge/actions/workflows/ci.yml)
+
 Local Chrome side-panel for **Claude Code** (and optionally Cursor).
 
 Three pieces:
@@ -250,7 +252,13 @@ Empirical tests that spawn a real `claude` process stay skipped unless
 
 ---
 
-Hebrew step-by-step: [docs/SETUP.he.md](docs/SETUP.he.md)
+Step-by-step setup guide: [docs/SETUP.md](docs/SETUP.md) (English) ·
+[docs/SETUP.he.md](docs/SETUP.he.md) (עברית)
+
+## Contributing & security
+
+PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## Privacy
 

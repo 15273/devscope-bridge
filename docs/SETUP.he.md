@@ -1,5 +1,7 @@
 # הפעלה וחיבור — DevScope (macOS)
 
+English version: [SETUP.md](SETUP.md)
+
 DevScope = תוסף Chrome + שרת מקומי (בריג) על `127.0.0.1:7878`.  
 הסוכן הוא ה־CLI של Claude שכבר מותקן אצלך. אין שרת בענן של DevScope.
 
