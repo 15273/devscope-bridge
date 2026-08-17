@@ -122,7 +122,6 @@ chmod +x scripts/install-macos-service.sh
 - כותב `~/Library/LaunchAgents/com.devscope.bridge.plist`
 - עולה עם ההתחברות למערכת
 - KeepAlive
-- מגביל עובדי orchestrator ל־3
 - לוג: `~/.dev-bridge/bridge.log`
 
 ```bash

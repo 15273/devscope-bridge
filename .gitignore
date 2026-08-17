@@ -12,9 +12,15 @@ build/
 extension/node_modules/
 extension/dist/
 
+# Local connection — never commit. Live data is in ~/.dev-bridge/ (outside the repo).
 .env
-.env.local
+.env.*
+!.env.example
+*.local
+local.env
 *.token
+*_token.json
+token
 .DS_Store
 .coverage
 htmlcov/

@@ -2,7 +2,7 @@
  * helpers.ts — shared primitives for the session store reducers.
  * (Type-only imports from sessionStore — no runtime cycle.)
  */
-import type { SessionState, StoreState } from './sessionStore';
+import type { SessionState, StoreState } from './sessionTypes';
 
 export function nextId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;

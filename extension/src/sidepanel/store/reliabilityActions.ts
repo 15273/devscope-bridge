@@ -7,7 +7,7 @@
  * Only type-imports from sessionStore — no runtime cycle.
  */
 import type { SessionInfo } from '@/shared/frames';
-import type { ChatMessage, SessionState, StoreState } from './sessionStore';
+import type { ChatMessage, SessionState, StoreState } from './sessionTypes';
 import { nextId, nowIso, updateSession } from './helpers';
 
 /** Re-anchor local turnStartedAt to the bridge's turn_elapsed_s beyond this drift. */

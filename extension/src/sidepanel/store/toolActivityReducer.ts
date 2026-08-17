@@ -8,7 +8,7 @@
  * mirroring how the bridge extracted tool_display.py out of session_reader.py.
  */
 import type { AgentActivity } from '@/shared/frames';
-import type { ChatMessage } from './sessionStore';
+import type { ChatMessage } from './sessionTypes';
 
 interface IdHelpers {
   nextId: () => string;

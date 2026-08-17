@@ -1,12 +1,17 @@
 # DevScope
 
-Local side-panel for **Claude Code** (and optionally Cursor) inside Chrome.
+Local Chrome side-panel for **Claude Code** (and optionally Cursor).
 
-The Chrome extension talks to a loopback-only Python bridge on `127.0.0.1:7878`.
-The bridge launches your already-installed `claude` / `cursor-agent` CLIs. Nothing
-is sent to a DevScope cloud — there isn’t one.
+Three pieces:
 
-This directory is a **standalone snapshot**, not coupled to any other product.
+1. **Chat** — sessions in the side panel, streamed from your local CLI
+2. **Browser** — bind a tab; Claude can read and click through MCP
+3. **Connection** — a loopback-only Python bridge on `127.0.0.1:7878`
+
+The bridge launches your already-installed `claude` / `cursor-agent`. Nothing
+is sent to a DevScope cloud — there isn’t one. Auth is a local token
+(`~/.dev-bridge/token`, chmod 0600). The process refuses to bind anywhere
+except loopback.
 
 ---
 
@@ -72,13 +77,12 @@ curl http://127.0.0.1:7878/health
 | `BRIDGE_HOST` | `127.0.0.1` | Bind address. **Loopback only** — other hosts are rejected. |
 | `BRIDGE_PORT` | `7878` | TCP port |
 | `BRIDGE_EXTENSION_ID` | placeholder | Chrome origin added to CORS, e.g. `chrome-extension://abcdef…` |
-| `ORCHESTRATOR_MAX_WORKERS` | `3` | Max concurrent Claude worker tasks |
 | `CURSOR_BIN` | macOS Cursor.app path | Cursor CLI binary |
 
 Copy `.env.example` → `devscope_bridge/.env.local` if you prefer a file (gitignored).
 
-**Do not** run the bridge with `uvicorn --workers 2+`. PTY terminals, WebSockets,
-and the orchestrator live in one process. `workers=1` is required.
+**Do not** run the bridge with `uvicorn --workers 2+`. PTY terminals and
+WebSockets live in one process. `workers=1` is required.
 
 ---
 
@@ -146,8 +150,7 @@ chmod +x scripts/install-macos-service.sh
 ```
 
 This writes `~/Library/LaunchAgents/com.devscope.bridge.plist`, starts at login,
-keeps the process alive, raises the open-files limit, and caps orchestrator
-workers at 3.
+keeps the process alive, and raises the open-files limit.
 
 ```bash
 # logs
@@ -171,17 +174,16 @@ no Linux unit in this snapshot.
 
 ---
 
-## 5. MCP tools (browser, WhatsApp, Gmail, …)
+## 5. Browser tools (MCP)
 
-Claude only sees browser/WhatsApp/Gmail tools if an MCP config is loaded.
+Claude only sees browser tools if an MCP config is loaded.
 
 **Option A — this repo as the chat’s project folder**  
-`.mcp.json` and `.cursor/mcp.json` already list the DevScope servers. In
-DevScope → New chat → Project = this directory.
+`.mcp.json` already lists `browser-control`. In DevScope → New chat →
+Project = this directory.
 
 **Option B — your own repo**  
-Copy `.mcp.json` (and optionally `.cursor/mcp.json`) into that project, then
-set the chat’s project path to that repo.
+Copy `.mcp.json` into that project, then set the chat’s project path to that repo.
 
 **Option C — register globally for the Claude CLI**
 
@@ -195,21 +197,19 @@ Use the **same** Python that has `devscope_bridge` installed. If `.mcp.json`
 says `python3 -m devscope_bridge.…`, that `python3` must resolve to the venv
 (activate it, or edit `.mcp.json` to `.venv/bin/python`).
 
-### Optional OAuth
+Bind a tab with the globe control in the composer. Without a bound tab,
+browser tools return `503`.
 
-```bash
-# Gmail
-GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... python -m devscope_bridge.gmail.authorize_gmail
+---
 
-# Google Calendar
-GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... python -m devscope_bridge.calendar.authorize_calendar
+## Optional extras
 
-# Meta Ads
-FACEBOOK_APP_ID=... FACEBOOK_APP_SECRET=... python -m devscope_bridge.meta_ads.authorize_meta_ads
-```
+This repo also ships personal add-ons used in daily work — WhatsApp / Gmail /
+Calendar / Meta Ads cockpits, an orchestrator task board, and an autonomous
+employee. They are **not** required for chat + browser + connection.
 
-Tokens land in `~/.dev-bridge/` (`gmail_token.json`, `calendar_token.json`,
-`meta_ads_token.json`). Never commit them.
+OAuth tokens (if you use those extras) land in `~/.dev-bridge/` and must
+never be committed.
 
 ---
 
@@ -217,11 +217,14 @@ Tokens land in `~/.dev-bridge/` (`gmail_token.json`, `calendar_token.json`,
 
 ```
 devscope_bridge/     Python package (FastAPI bridge + MCP stdio servers)
+  main.py            App, lifespan, loopback bind
+  session_http.py    REST: sessions, transcript, browser actions
+  ws_session.py      Chat WebSocket
+  pty_ws.py          Interactive terminal
+  session_manager.py Claude/Cursor process + run_prompt
 extension/           Chrome MV3 side panel (Vite)
 scripts/             macOS LaunchAgent installer
 .mcp.json            Claude Code MCP (this repo)
-.cursor/mcp.json     Cursor agent MCP (this repo)
-.claude/skills/      Agent playbooks
 ```
 
 Data on disk (all local):
@@ -246,21 +249,6 @@ Empirical tests that spawn a real `claude` process stay skipped unless
 `RUN_EMPIRICAL=1`.
 
 ---
-
-## Publish this as its own GitHub repo
-
-This folder is currently nested inside another project. To make it public:
-
-```bash
-cd /path/to/devscope
-git init
-git add .
-git commit -m "Initial public snapshot of DevScope"
-gh repo create devscope --public --source=. --remote=origin --push
-```
-
-Do a search for secrets before the first push (`token`, `.env`, JWT). This
-snapshot ships with examples only — no live credentials.
 
 Hebrew step-by-step: [docs/SETUP.he.md](docs/SETUP.he.md)
 
