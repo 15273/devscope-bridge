@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <title>DevScope — מיקרופון</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 32rem;
+        margin: 3rem auto;
+        padding: 0 1.25rem;
+        line-height: 1.6;
+        color: #1a1a1a;
+      }
+      h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+      p { color: #444; margin: 0.75rem 0; }
+      .note {
+        background: #fff7ed;
+        border: 1px solid #fdba74;
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        font-size: 0.9rem;
+      }
+      button {
+        margin-top: 1rem;
+        padding: 0.65rem 1.25rem;
+        font-size: 1rem;
+        border: none;
+        border-radius: 8px;
+        background: #e85d04;
+        color: #fff;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.5; cursor: default; }
+      #status { margin-top: 1rem; font-size: 0.9rem; }
+      .ok { color: #15803d; }
+      .err { color: #b91c1c; }
+    </style>
+  </head>
+  <body>
+    <h1>הפעלת מיקרופון ל-DevScope</h1>
+    <p class="note">
+      זה <strong>דף של התוסף</strong> (לא אתר חיצוני). Chrome לא מציג בקשת מיקרופון בתוך ה-side panel —
+      לכן מאשרים פעם אחת כאן.
+    </p>
+    <p>אחרי האישור, חזור ל-DevScope ולחץ על אייקון המיקרופון ליד כפתור השליחה (לא Record).</p>
+    <button type="button" id="grant">אשר מיקרופון</button>
+    <p id="status" aria-live="polite"></p>
+    <script type="module" src="./src/mic-grant/main.ts"></script>
+  </body>
+</html>

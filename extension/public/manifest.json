@@ -1,0 +1,124 @@
+{
+  "manifest_version": 3,
+  "name": "DevScope",
+  "version": "0.1.0",
+  "description": "Chat with the local Claude CLI from a Chrome side panel.",
+  "icons": {
+    "16": "icon-16.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  },
+  "action": {
+    "default_title": "Open DevScope"
+  },
+  "side_panel": {
+    "default_path": "src/sidepanel/index.html"
+  },
+  "background": {
+    "service_worker": "src/background/service_worker.ts",
+    "type": "module"
+  },
+  "permissions": [
+    "sidePanel",
+    "notifications",
+    "storage",
+    "unlimitedStorage",
+    "offscreen",
+    "tabs",
+    "scripting",
+    "webNavigation",
+    "activeTab",
+    "tabCapture",
+    "downloads",
+    "debugger"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:7878/*",
+    "ws://127.0.0.1:7878/*",
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["src/wa_inject/wa_compose_inject.ts"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.linkedin.com/*", "https://linkedin.com/*"],
+      "js": [
+        "src/linkedin/linkedin-feed-scraper.ts",
+        "src/linkedin/linkedin-composer.ts",
+        "src/linkedin/linkedin-comment.ts"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.linkedin.com/in/*",
+        "https://linkedin.com/in/*",
+        "https://www.linkedin.com/talent/*",
+        "https://linkedin.com/talent/*",
+        "https://www.linkedin.com/recruiter/*",
+        "https://linkedin.com/recruiter/*",
+        "https://www.linkedin.com/sales/*",
+        "https://linkedin.com/sales/*",
+        "https://www.linkedin.com/search/results/people/*",
+        "https://linkedin.com/search/results/people/*"
+      ],
+      "js": ["shared/linkedin/intercept/api-interceptor.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.linkedin.com/in/*",
+        "https://linkedin.com/in/*",
+        "https://www.linkedin.com/talent/*",
+        "https://linkedin.com/talent/*",
+        "https://www.linkedin.com/recruiter/*",
+        "https://linkedin.com/recruiter/*",
+        "https://www.linkedin.com/sales/*",
+        "https://linkedin.com/sales/*",
+        "https://www.linkedin.com/search/results/people/*",
+        "https://linkedin.com/search/results/people/*"
+      ],
+      "js": [
+        "shared/linkedin/utils/text-utils.js",
+        "shared/linkedin/utils/query-first.js",
+        "shared/linkedin/platform-router.js",
+        "shared/linkedin/selectors/registry.js",
+        "shared/linkedin/utils/readiness-poll.js",
+        "shared/linkedin/utils/bulk-reveal.js",
+        "shared/linkedin/utils/search-facet-parser.js",
+        "shared/linkedin/utils/search-filter-pills.js",
+        "shared/linkedin/utils/search-card-extractor.js",
+        "shared/linkedin/utils/search-state.js",
+        "shared/linkedin/utils/page-json-extractor.js",
+        "shared/linkedin/lib/public-people-search-parser-bootstrap.js",
+        "shared/linkedin/intercept/parsers/index.js",
+        "shared/linkedin/profile-normalizer.js",
+        "shared/linkedin/scrapers/public-profile.js",
+        "shared/linkedin/scrapers/talent-profile.js",
+        "shared/linkedin/scrapers/recruiter-lite-profile.js",
+        "shared/linkedin/scrapers/sales-profile.js",
+        "shared/linkedin/scrapers/public-search.js",
+        "shared/linkedin/scrapers/talent-search.js",
+        "shared/linkedin/scrapers/sales-search.js",
+        "shared/linkedin/scrapers/recruiter-lite-search.js",
+        "shared/linkedin/scrapers/profile-router.js",
+        "shared/linkedin/scrapers/search-router.js",
+        "shared/linkedin/diagnostics/selector-probe.js",
+        "shared/linkedin/handlers/unified-handler.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "src/content/accessibility_tree.ts",
+        "src/content/agent_visual_indicator.ts"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}

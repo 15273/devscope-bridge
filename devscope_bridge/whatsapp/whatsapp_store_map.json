@@ -1,0 +1,16 @@
+{
+  "store_modules": {
+    "Chat": "WAWebChatCollection",
+    "Msg": "WAWebMsgCollection",
+    "GroupMetadata": "WAWebGroupMetadataCollection",
+    "SendTextMsg": "WAWebSendTextMsgAction"
+  },
+  "dom_fallback": {
+    "pane_side": "#pane-side",
+    "chat_row": "#pane-side [role='listitem']",
+    "composer": "footer [contenteditable='true'][role='textbox']",
+    "msg_in": ".message-in",
+    "msg_out": ".message-out"
+  },
+  "notes": "store_modules names are webpack module ids reverse-engineered from WhatsApp Web; keep current when WA Web updates."
+}

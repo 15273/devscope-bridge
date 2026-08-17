@@ -1,0 +1,29 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DevScope">
+  <!--
+    DevScope logo — radar/scope reticle on the amber "signal" tile.
+    Master source for the Chrome Web Store app icons. The reticle geometry is
+    the same mark used in src/sidepanel/components/Logomark.tsx, scaled up and
+    placed on a rounded-square tile with the amber signal gradient (#E86D13 -> #C95A08).
+  -->
+  <defs>
+    <linearGradient id="signalTile" x1="0" y1="0" x2="0" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E86D13"/>
+      <stop offset="1" stop-color="#C95A08"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Tile: rounded square filled with the vertical amber gradient -->
+  <rect x="0" y="0" width="128" height="128" rx="28" fill="url(#signalTile)"/>
+
+  <!-- Reticle, drawn in white. Center (64,64). Outer r=39, inner r=17, dot r=5.4.
+       Crosshair ticks span from just outside the tile edge in toward the inner ring. -->
+  <g stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <circle cx="64" cy="64" r="39"/>
+    <circle cx="64" cy="64" r="17"/>
+    <path d="M64 9V25"/>
+    <path d="M64 103V119"/>
+    <path d="M9 64H25"/>
+    <path d="M103 64H119"/>
+  </g>
+  <circle cx="64" cy="64" r="5.4" fill="#FFFFFF"/>
+</svg>

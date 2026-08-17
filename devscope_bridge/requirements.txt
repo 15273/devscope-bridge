@@ -1,0 +1,11 @@
+# Delta requirements for devscope_bridge (beyond project root requirements.txt)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+websockets>=13.0
+pydantic>=2.0
+httpx>=0.27
+mcp>=1.0
+# Gmail engine (Track B)
+google-api-python-client>=2.100
+google-auth>=2.20
+google-auth-oauthlib>=1.0

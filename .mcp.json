@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "browser-control": {
+      "command": "python3",
+      "args": ["-m", "devscope_bridge.browser_mcp_server"]
+    },
+    "task-control": {
+      "command": "python3",
+      "args": ["-m", "devscope_bridge.task_mcp_server"]
+    },
+    "devscope-control": {
+      "command": "python3",
+      "args": ["-m", "devscope_bridge.devscope_mcp_server"]
+    },
+    "whatsapp-control": {
+      "command": "python3",
+      "args": ["-m", "devscope_bridge.whatsapp_mcp_server"]
+    },
+    "gmail-control": {
+      "command": "python3",
+      "args": ["-m", "devscope_bridge.gmail_mcp_server"]
+    },
+    "calendar-control": {
+      "command": "python3",
+      "args": ["-m", "devscope_bridge.calendar_mcp_server"]
+    },
+    "meta-ads-control": {
+      "command": "python3",
+      "args": ["-m", "devscope_bridge.meta_ads_mcp_server"]
+    }
+  }
+}
