@@ -17,6 +17,56 @@ except loopback.
 
 ---
 
+## Where this is going
+
+The side panel is the surface. The goal underneath it is a **standing
+colleague** — an assistant and developer that works on its own initiative, on
+your machine, with your accounts, and comes back with work already done
+instead of waiting to be told what to do.
+
+A chat tool answers when spoken to. Turning that into a colleague takes three
+things, and all three are in this repo today:
+
+| Property | What it means | Where it lives |
+|---|---|---|
+| **A heartbeat** | Something wakes the agent on a timer, so it can act with nobody typing | [`orchestrator.py`](devscope_bridge/orchestrator.py) — a tick loop driving a Manager-of-Managers → Domain Manager → Worker hierarchy |
+| **Durable state** | Work outlives a single conversation, a restart, or a crashed process | [`task_store.py`](devscope_bridge/task_store.py) — a task board with parent/child trees, logs, and stuck-worker reconciliation |
+| **Explicit limits** | Autonomy you can leave running, because the dangerous actions stop and ask | [`agent_policies.py`](devscope_bridge/agent_policies.py) — workers must call `task_request_approval` before sending, buying, deleting, or spending |
+
+Reading, researching, navigating, and filling forms *without* submitting are
+autonomous. Sending, publishing, deleting, and anything touching money pause
+for you. That line is the whole design: the agent should be able to run all
+day unattended without any single step being one you'd want to undo.
+
+### Honest status
+
+Working today: the tick loop, the task hierarchy, the approval gate, per-site
+playbooks that remember selectors and workflows across runs
+([`schedule_playbook.py`](devscope_bridge/schedule_playbook.py)), and an
+autonomous-employee layer that can report to Notion, WhatsApp, or email
+([`employee_config.py`](devscope_bridge/employee_config.py) — off by default).
+
+Not there yet, and the difference between "runs unattended" and "genuinely
+doesn't wait for instructions":
+
+- **Self-originating work.** Tasks still mostly arrive from you. The agent can
+  already *read* mail, messages, and calendar through MCP; what's missing is
+  the step that turns an observation into a proposed task on its own.
+- **Memory of you.** Playbooks remember websites. Nothing yet remembers your
+  preferences, your past decisions, or how you like things done.
+- **Judgement about when to interrupt.** A colleague who asks about everything
+  is as tiring as one who asks about nothing.
+
+### What stays true regardless
+
+Local-first, permanently. The bridge binds loopback only and refuses anything
+else. The agent is the `claude` CLI you already installed and logged into —
+this project ships no model, no account, and no server of its own. Autonomy
+here means *your* machine doing more on your behalf, not your work moving
+somewhere you can't see it.
+
+---
+
 ## What you need
 
 | Thing | Why |
@@ -204,13 +254,27 @@ browser tools return `503`.
 
 ---
 
-## Optional extras
+## Autonomy layer
 
-This repo also ships personal add-ons used in daily work — WhatsApp / Gmail /
-Calendar / Meta Ads cockpits, an orchestrator task board, and an autonomous
-employee. They are **not** required for chat + browser + connection.
+Beyond chat + browser + connection, the repo ships the pieces described in
+[Where this is going](#where-this-is-going). All of it is **off by default** —
+a fresh install behaves exactly like a side panel with a chat in it.
 
-OAuth tokens (if you use those extras) land in `~/.dev-bridge/` and must
+| Piece | What it does | Settings |
+|---|---|---|
+| Orchestrator | Tick loop, 3-tier agent hierarchy, worker dispatch, concurrency cap, quota throttling | `~/.dev-bridge/orchestrator_config.json` |
+| Task board | Persistent tasks, subtasks, logs, approval requests | `~/.dev-bridge/*.db` |
+| Schedules | Recurring runs with a learned per-site playbook | `~/.dev-bridge/*.db` |
+| Autonomous employee | Board sync (Notion) and reporting over panel / WhatsApp / email | `~/.dev-bridge/employee_config.json` |
+| Cockpits | WhatsApp, Gmail, Calendar, Meta Ads — read/act through MCP | OAuth tokens in `~/.dev-bridge/` |
+
+Turn the orchestrator on and it starts waking agents on its own. Read
+[`agent_policies.py`](devscope_bridge/agent_policies.py) first — it is the
+document that defines what an unattended worker may and may not do without
+asking you. `WORKER_SAFETY_POLICY` is the default; the `_E2E` variant relaxes
+sending and posting and is a deliberate choice, not a default.
+
+OAuth tokens (if you use the cockpits) land in `~/.dev-bridge/` and must
 never be committed.
 
 ---
@@ -224,6 +288,9 @@ devscope_bridge/     Python package (FastAPI bridge + MCP stdio servers)
   ws_session.py      Chat WebSocket
   pty_ws.py          Interactive terminal
   session_manager.py Claude/Cursor process + run_prompt
+  orchestrator*.py   Tick loop + pure decision logic for the agent hierarchy
+  agent_policies.py  System prompts and the worker approval policy
+  task_store.py      Persistent task board
 extension/           Chrome MV3 side panel (Vite)
 scripts/             macOS LaunchAgent installer
 .mcp.json            Claude Code MCP (this repo)
