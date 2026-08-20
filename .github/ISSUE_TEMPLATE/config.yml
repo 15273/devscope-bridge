@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/15273/devscope-bridge/security/advisories/new
+    about: Please report security bugs privately, not as a public issue.
+  - name: Setup help
+    url: https://github.com/15273/devscope-bridge/blob/main/docs/SETUP.md
+    about: Step-by-step install guide (English and Hebrew).

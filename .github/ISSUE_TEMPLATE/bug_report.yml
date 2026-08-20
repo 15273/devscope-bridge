@@ -1,0 +1,70 @@
+name: Bug report
+description: Something in the bridge, side panel, or MCP tools misbehaves.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: the README's **If it stays Offline** table covers the
+        common connection failures (403, grey pip, `claude not found`, 503).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+      placeholder: |
+        1. Started the bridge with …
+        2. Opened the side panel and …
+        3. Expected …, got …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part
+      options:
+        - Bridge (Python / FastAPI)
+        - Chrome extension / side panel
+        - Browser MCP tools
+        - Orchestrator / task board
+        - Cockpits (WhatsApp / Gmail / Calendar / Meta Ads)
+        - Setup and install
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Python version, Node version, Chrome version.
+      placeholder: "macOS 15.2, Python 3.12.3, Node 20.11, Chrome 131"
+    validations:
+      required: true
+
+  - type: input
+    id: claude-cli
+    attributes:
+      label: Agent CLI
+      description: Output of `claude --version` (and `cursor-agent --version` if relevant).
+      placeholder: "claude 1.0.x"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: |
+        From `~/.dev-bridge/bridge.log`, plus the extension's service-worker
+        console if the side panel is involved. This is automatically formatted
+        as code.
+      render: shell
+
+  - type: checkboxes
+    id: scrubbed
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed my bridge token, OAuth tokens, and any personal data from the logs above.
+          required: true

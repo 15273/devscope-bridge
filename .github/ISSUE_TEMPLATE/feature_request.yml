@@ -1,0 +1,42 @@
+name: Feature request
+description: Suggest a capability or change.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The README's **Where this is going** section describes the direction
+        the project is heading. Proposals that move toward it are easiest to
+        accept.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that is awkward or impossible today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like instead
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints this respects
+      description: |
+        These are non-negotiable — see CONTRIBUTING.md. A proposal that breaks
+        one of them will be closed.
+      options:
+        - label: Stays loopback-only; no non-loopback bind, no cloud backend, no phoning home.
+        - label: Does not weaken the local token auth.
+        - label: Keeps `workers=1` semantics (PTYs and WebSockets share one process).
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
