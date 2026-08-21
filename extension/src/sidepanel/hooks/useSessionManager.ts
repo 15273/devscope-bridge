@@ -39,6 +39,7 @@ import {
   syncBridgeHistory,
 } from '../bridge';
 import { collectWsKeepOpen } from '@/shared/wsKeepalive';
+import { collectPendingRecoveryTargets } from '../utils/pendingRecovery';
 import { streamDebug } from '../utils/streamDebug';
 import { createHistoryPersister, type HistoryPersister } from '../utils/historyPersist';
 
@@ -301,13 +302,6 @@ export function useSessionManager() {
       const token = await getToken();
       const infos = await fetchSessions(token);
       setBridgeUnreachable(false);
-      // First sight of a session → recover pending interactive requests (C4).
-      for (const name of Object.keys(infos)) {
-        if (!recoveredPendingRef.current.has(name)) {
-          recoveredPendingRef.current.add(name);
-          recoverPendingRef.current(name).catch(() => {});
-        }
-      }
       const syncTargets = new Set(collectTranscriptSyncTargets(infos));
       const activeName = stateRef.current.activeSession;
       // Only force-reload the active chat's empty spinner — never fan out to
@@ -325,6 +319,19 @@ export function useSessionManager() {
         if (name !== activeName) syncTargets.delete(name);
       }
       dispatch({ type: 'SET_SESSIONS', infos });
+      // Recover pending interactive requests (C4): on first sight of a session,
+      // and again whenever the bridge reports `awaiting` but the local store has
+      // no unresolved card (missed WS frame / store rebuild — the "Waiting for
+      // your approval" banner with no card). Runs after SET_SESSIONS so the
+      // recovered card's dispatch never lands before the session exists.
+      for (const name of collectPendingRecoveryTargets(
+        infos,
+        stateRef.current.sessions,
+        recoveredPendingRef.current,
+      )) {
+        recoveredPendingRef.current.add(name);
+        recoverPendingRef.current(name).catch(() => {});
+      }
       streamDebug('poll', '*', 'GET /sessions', {
         count: Object.keys(infos).length,
         syncTargets: [...syncTargets],
