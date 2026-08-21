@@ -29,3 +29,8 @@ def test_weekly_at():
 
 def test_missing_recurrence_defaults_hour():
     assert _next_run_at({}, "2026-08-21 10:00:00") == "2026-08-21 11:00:00"
+
+
+def test_every_minutes_zero_does_not_hang():
+    nxt = _next_run_at({"every_minutes": 0}, "2026-08-21 10:00:00")
+    assert nxt == "2026-08-21 10:01:00"

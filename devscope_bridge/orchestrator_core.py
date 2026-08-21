@@ -158,7 +158,7 @@ def _next_run_at(recurrence: dict, now: str, *, anchor: str | None = None) -> st
         except ValueError:
             anchor_dt = None
     if "every_minutes" in recurrence:
-        step = timedelta(minutes=int(recurrence["every_minutes"]))
+        step = timedelta(minutes=max(1, int(recurrence["every_minutes"])))
         nxt = (anchor_dt or base) + step
         while nxt <= base:          # skip slots missed while the bridge was down
             nxt += step
