@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 
-from devscope_bridge import task_store
+from devscope_bridge import task_homes, task_store
 from devscope_bridge.schedule_models import (
     ScheduleCreateBody,
     ScheduleDiscoverBody,
+    ScheduleMemoryBody,
     SchedulePlaybookPatchBody,
+    ScheduleRunReportBody,
     ScheduleSetupInstructionBody,
     ScheduleSetupPatchBody,
     ScheduleSetupStartBody,
@@ -147,6 +150,65 @@ def update_schedule(schedule_id: int, body: ScheduleUpdateBody) -> dict:
     task_store.update_schedule(schedule_id, **fields)
     sched = task_store.get_schedule(schedule_id)
     return _enrich(sched) if sched else {}
+
+
+def _require_schedule(schedule_id: int) -> dict:
+    sched = task_store.get_schedule(schedule_id)
+    if sched is None:
+        raise HTTPException(status_code=404, detail="schedule not found")
+    return sched
+
+
+@router.get("/{schedule_id}/runs")
+def list_runs(schedule_id: int) -> dict:
+    _require_schedule(schedule_id)
+    return {"runs": task_store.list_schedule_runs(schedule_id)}
+
+
+@router.post("/{schedule_id}/runs/report")
+def report_run(schedule_id: int, body: ScheduleRunReportBody) -> dict:
+    _require_schedule(schedule_id)
+    run = task_store.get_run_for_task(body.task_id)
+    if run is None or run["schedule_id"] != schedule_id:
+        raise HTTPException(status_code=404, detail="run not found for task")
+    if run["status"] != "running":
+        return {"ok": True, "already_closed": True, "run_id": run["id"]}
+    task_store.finish_schedule_run(
+        run["id"],
+        status=body.status,
+        digest_text=body.digest,
+        artifacts=body.artifacts,
+    )
+    if body.memory_note:
+        task_homes.append_memory(schedule_id, body.memory_note)
+    return {"ok": True, "run_id": run["id"]}
+
+
+@router.get("/{schedule_id}/memory")
+def get_memory(schedule_id: int) -> dict:
+    _require_schedule(schedule_id)
+    return {"memory": task_homes.read_memory(schedule_id)}
+
+
+@router.put("/{schedule_id}/memory")
+def put_memory(schedule_id: int, body: ScheduleMemoryBody) -> dict:
+    _require_schedule(schedule_id)
+    task_homes.write_memory(schedule_id, body.content)
+    return {"ok": True}
+
+
+@router.get("/{schedule_id}/reports")
+def list_run_reports(schedule_id: int) -> dict:
+    _require_schedule(schedule_id)
+    return {"reports": task_homes.list_reports(schedule_id)}
+
+
+@router.post("/{schedule_id}/run")
+def run_now(schedule_id: int) -> dict:
+    _require_schedule(schedule_id)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    task_store.set_schedule_next_run(schedule_id, now)
+    return {"ok": True, "next_run_at": now}
 
 
 @router.post("/{schedule_id}/playbook")

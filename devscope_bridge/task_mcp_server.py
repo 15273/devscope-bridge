@@ -170,6 +170,32 @@ async def schedule_setup_set_instruction(draft_id: str, instruction: str) -> dic
                        json_body={"instruction": instruction})
 
 
+@mcp.tool()
+async def schedule_run_report(schedule_id: int, task_id: str, digest: str,
+                              artifacts: list[str] | None = None,
+                              memory_note: str | None = None,
+                              status: str = "success") -> dict[str, Any]:
+    """MANDATORY at the end of every scheduled run: short Hebrew digest of what
+    happened, artifact paths written under the task home, and optionally one
+    memory note worth keeping for future runs."""
+    return await _call("POST", f"/schedules/{schedule_id}/runs/report", json_body={
+        "task_id": task_id, "digest": digest, "artifacts": artifacts or [],
+        "memory_note": memory_note, "status": status})
+
+
+@mcp.tool()
+async def schedule_memory_read(schedule_id: int) -> dict[str, Any]:
+    """Read this recurring task's persistent MEMORY.md."""
+    return await _call("GET", f"/schedules/{schedule_id}/memory")
+
+
+@mcp.tool()
+async def schedule_memory_write(schedule_id: int, content: str) -> dict[str, Any]:
+    """Rewrite this recurring task's persistent MEMORY.md (full replace)."""
+    return await _call("PUT", f"/schedules/{schedule_id}/memory",
+                       json_body={"content": content})
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
     mcp.run(transport="stdio")

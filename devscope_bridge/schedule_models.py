@@ -59,6 +59,18 @@ class SchedulePlaybookPatchBody(BaseModel):
     patch: dict[str, Any]
 
 
+class ScheduleRunReportBody(BaseModel):
+    task_id: str
+    digest: str
+    artifacts: list[str] = Field(default_factory=list)
+    memory_note: str | None = None
+    status: str = Field(default="success", pattern="^(success|failed)$")
+
+
+class ScheduleMemoryBody(BaseModel):
+    content: str
+
+
 class ScheduleDiscoverBody(BaseModel):
     entry_url: str
     goal: str
