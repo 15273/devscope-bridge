@@ -5,7 +5,8 @@ Owns ~/.dev-bridge/agent_tasks.db. The dev_bridge process is the SOLE writer
 (workers reach it through the /tasks HTTP routes, never SQLite directly), so we
 keep a simple connection-per-call model with WAL for read concurrency.
 
-Tables: tasks (hierarchical), task_logs (timeline), approvals, schedules.
+Tables: tasks (hierarchical), task_logs (timeline), approvals, schedules,
+schedule_runs (per-run history for a schedule).
 """
 
 import json
@@ -71,10 +72,27 @@ CREATE TABLE IF NOT EXISTS schedules (
   enabled      INTEGER DEFAULT 1,
   updated_at   TEXT
 );
+CREATE TABLE IF NOT EXISTS schedule_runs (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  schedule_id   INTEGER NOT NULL,
+  task_id       TEXT NOT NULL,
+  started_at    TEXT NOT NULL,
+  finished_at   TEXT,
+  status        TEXT NOT NULL DEFAULT 'running',  -- running|success|failed|waiting_user|answered_by_chief
+  digest_text   TEXT,
+  question_text TEXT,
+  question_importance TEXT,                       -- routine | important
+  answered_by   TEXT,
+  answer_text   TEXT,
+  artifacts_json TEXT,
+  log_session   TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_domain ON tasks(domain);
 CREATE INDEX IF NOT EXISTS idx_logs_task ON task_logs(task_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_runs_sched ON schedule_runs(schedule_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_runs_task ON schedule_runs(task_id);
 """
 
 
@@ -472,6 +490,90 @@ def touch_schedule_run(schedule_id: int, task_id: str, *, success: bool = False)
             pb = merge_playbook(pb, {"last_success_at": now})
             fields["playbook"] = pb
     update_schedule(schedule_id, **fields)
+
+
+def _run_row(row: sqlite3.Row) -> dict:
+    data = dict(row)
+    try:
+        data["artifacts"] = json.loads(data.pop("artifacts_json") or "[]")
+    except json.JSONDecodeError:
+        data["artifacts"] = []
+    return data
+
+
+def create_schedule_run(schedule_id: int, task_id: str) -> int:
+    now = _now_str()
+    with _connect() as conn:
+        cur = conn.execute(
+            "INSERT INTO schedule_runs (schedule_id, task_id, started_at, status, "
+            "log_session) VALUES (?,?,?,?,?)",
+            (schedule_id, task_id, now, "running", f"worker-{task_id}"),
+        )
+        return int(cur.lastrowid)
+
+
+def finish_schedule_run(
+    run_id: int,
+    *,
+    status: str,
+    digest_text: str | None = None,
+    question_text: str | None = None,
+    question_importance: str | None = None,
+    answered_by: str | None = None,
+    answer_text: str | None = None,
+    artifacts: list[str] | None = None,
+) -> None:
+    fields = {
+        "status": status,
+        "digest_text": digest_text,
+        "question_text": question_text,
+        "question_importance": question_importance,
+        "answered_by": answered_by,
+        "answer_text": answer_text,
+    }
+    sets: dict[str, object] = {k: v for k, v in fields.items() if v is not None}
+    if artifacts is not None:
+        sets["artifacts_json"] = json.dumps(artifacts, ensure_ascii=False)
+    if status != "running":
+        sets["finished_at"] = _now_str()
+    if not sets:
+        return
+    assignments = ", ".join(f"{k}=?" for k in sets)
+    with _connect() as conn:
+        conn.execute(f"UPDATE schedule_runs SET {assignments} WHERE id=?",
+                     (*sets.values(), run_id))
+
+
+def get_schedule_run(run_id: int) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute("SELECT * FROM schedule_runs WHERE id=?", (run_id,)).fetchone()
+    return _run_row(row) if row else None
+
+
+def get_run_for_task(task_id: str) -> dict | None:
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM schedule_runs WHERE task_id=? ORDER BY id DESC LIMIT 1",
+            (task_id,),
+        ).fetchone()
+    return _run_row(row) if row else None
+
+
+def list_schedule_runs(schedule_id: int, limit: int = 50) -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM schedule_runs WHERE schedule_id=? ORDER BY id DESC LIMIT ?",
+            (schedule_id, limit),
+        ).fetchall()
+    return [_run_row(r) for r in rows]
+
+
+def list_waiting_runs() -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM schedule_runs WHERE status='waiting_user' ORDER BY id ASC"
+        ).fetchall()
+    return [_run_row(r) for r in rows]
 
 
 def count_tasks_completed_since(hours: int = 24) -> int:
