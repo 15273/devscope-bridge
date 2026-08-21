@@ -48,14 +48,20 @@ def reconcile_stuck_workers(now: str | None = None, *, stale_minutes: int = _STA
         age_min = (now_dt - updated).total_seconds() / 60.0
         if age_min < stale_minutes:
             continue
+        summary = (
+            "Worker ended without marking task done "
+            f"(auto-reconciled after {int(age_min)}m idle)"
+        )
         task_store.update_task(
             task["id"],
             status="failed",
-            result_summary=(
-                "Worker ended without marking task done "
-                f"(auto-reconciled after {int(age_min)}m idle)"
-            ),
+            result_summary=summary,
         )
+        if task.get("schedule_id"):
+            run = task_store.get_run_for_task(task["id"])
+            if run and run["status"] == "running":
+                task_store.finish_schedule_run(
+                    run["id"], status="failed", digest_text=summary)
         task_store.add_log(
             task["id"], actor="orchestrator",
             message=f"reconciled stale in_progress ({name})",

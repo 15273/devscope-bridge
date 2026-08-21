@@ -112,7 +112,7 @@ def test_materialise_due_schedules_creates_tasks_and_advances(store):
         next_run_at="2000-01-01 00:00:00")
     created = oc.materialise_due_schedules(now="2026-06-08 12:00:00")
     assert created == 1
-    assert any(t["title"] == "Ping" for t in store.list_tasks(status="new"))
+    assert any(t["title"] == "Ping" for t in store.list_tasks(status="ready"))
     # next_run advanced into the future
     assert store.due_schedules(now="2026-06-08 12:00:00") == []
 
@@ -130,7 +130,7 @@ def test_materialise_injects_playbook_into_instruction(store):
         next_run_at="2000-01-01 00:00:00",
     )
     oc.materialise_due_schedules(now="2026-06-08 12:00:00")
-    task = store.list_tasks(status="new")[0]
+    task = store.list_tasks(status="ready")[0]
     assert "linkedin.com" in task["instruction"]
     assert ".ql-editor" in task["instruction"]
     assert task["schedule_id"] is not None

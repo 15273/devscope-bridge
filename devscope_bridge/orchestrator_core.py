@@ -213,17 +213,18 @@ def materialise_due_schedules(now: str | None = None) -> int:
         instruction = build_scheduled_instruction(base_instruction, playbook)
         tid = task_store.create_task(
             title=tmpl.get("title", sched["title"]),
-            kind=tmpl.get("kind", "mom_task"),
+            kind="worker_unit",
             detail=tmpl.get("detail"),
             domain=tmpl.get("domain"),
             instruction=instruction,
             source="scheduled",
-            status="new",
+            status="ready",
             autonomy=tmpl.get("autonomy"),
             schedule_id=sched["id"],
         )
         task_store.add_log(tid, actor="scheduler",
                            message=f"materialised from schedule #{sched['id']}")
+        task_store.create_schedule_run(sched["id"], tid)
         recurrence = tmpl.get("recurrence", {})
         task_store.set_schedule_next_run(sched["id"], _next_run_at(recurrence, now, anchor=sched.get("next_run_at")))
     return len(due)

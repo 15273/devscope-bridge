@@ -65,14 +65,22 @@ def update_task(task_id: str, body: TaskUpdateBody) -> dict:
         task_store.add_log(task_id, actor=fields.get("assignee_session") or "agent",
                            message=body.note)
     task = task_store.get_task(task_id)
-    if (
-        before
-        and task
-        and before.get("status") != "done"
-        and task.get("status") == "done"
-        and task.get("schedule_id")
-    ):
-        task_store.touch_schedule_run(int(task["schedule_id"]), task_id, success=True)
+    if before and task and task.get("schedule_id"):
+        prev_status = before.get("status")
+        new_status = task.get("status")
+        if prev_status != "done" and new_status == "done":
+            task_store.touch_schedule_run(int(task["schedule_id"]), task_id, success=True)
+            run = task_store.get_run_for_task(task_id)
+            if run and run["status"] == "running":
+                task_store.finish_schedule_run(
+                    run["id"], status="success",
+                    digest_text=task.get("result_summary") or None)
+        elif prev_status != "failed" and new_status == "failed":
+            run = task_store.get_run_for_task(task_id)
+            if run and run["status"] == "running":
+                task_store.finish_schedule_run(
+                    run["id"], status="failed",
+                    digest_text=task.get("result_summary") or None)
     if task:
         board_relay.notify_task_update(
             task_id, task["title"], task["status"], task.get("domain"), body.note,

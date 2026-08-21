@@ -131,6 +131,34 @@ async def test_reconcile_clears_stale_in_progress(store, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_reconcile_stuck_worker_closes_running_schedule_run(store, monkeypatch):
+    from devscope_bridge import orchestrator as orch
+
+    sid = store.add_schedule(title="research", template={"instruction": "x"})
+    tid = store.create_task(
+        title="stuck", kind="worker_unit", status="in_progress", schedule_id=sid,
+    )
+    rid = store.create_schedule_run(sid, tid)
+    store.update_task(tid, assignee_session="worker-stuck")
+    with store._connect() as conn:  # noqa: SLF001 — test-only
+        conn.execute(
+            "UPDATE tasks SET updated_at = '2026-06-08 10:00:00' WHERE id = ?",
+            (tid,),
+        )
+        conn.commit()
+    monkeypatch.setattr(
+        "devscope_bridge.session_manager.is_turn_running",
+        lambda _n: False,
+    )
+    cleared = orch.reconcile_stuck_workers(now="2026-06-08 12:00:00", stale_minutes=10)
+    assert cleared == 1
+    run = store.get_schedule_run(rid)
+    assert run["status"] == "failed"
+    assert run["finished_at"]
+    assert "auto-reconciled" in run["digest_text"]
+
+
+@pytest.mark.asyncio
 async def test_dispatch_timeout_marks_failed(store, monkeypatch):
     class TimeoutRunner:
         async def run_turn(self, name, prompt, *, mode="act", agent="claude",

@@ -83,6 +83,32 @@ def test_create_task_rejects_invalid_autonomy(client):
     assert r.status_code == 422
 
 
+def test_update_to_done_closes_running_schedule_run(client):
+    sid = task_store.add_schedule(title="research", template={"instruction": "x"})
+    tid = task_store.create_task(title="r", kind="worker_unit", schedule_id=sid)
+    rid = task_store.create_schedule_run(sid, tid)
+    r = client.post(f"/tasks/{tid}/update",
+                    json={"status": "done", "result_summary": "3 findings"})
+    assert r.status_code == 200
+    run = task_store.get_schedule_run(rid)
+    assert run["status"] == "success"
+    assert run["digest_text"] == "3 findings"
+    assert run["finished_at"]
+
+
+def test_update_to_failed_closes_running_schedule_run(client):
+    sid = task_store.add_schedule(title="research", template={"instruction": "x"})
+    tid = task_store.create_task(title="r", kind="worker_unit", schedule_id=sid)
+    rid = task_store.create_schedule_run(sid, tid)
+    r = client.post(f"/tasks/{tid}/update",
+                    json={"status": "failed", "result_summary": "browser crashed"})
+    assert r.status_code == 200
+    run = task_store.get_schedule_run(rid)
+    assert run["status"] == "failed"
+    assert run["digest_text"] == "browser crashed"
+    assert run["finished_at"]
+
+
 def test_worker_unit_inherits_autonomy_through_api(client):
     parent = client.post("/tasks", json={"title": "P", "kind": "mom_task",
                                           "autonomy": "e2e"}).json()["id"]
