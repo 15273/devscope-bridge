@@ -1,6 +1,6 @@
 import pytest
 from devscope_bridge import orchestrator, task_store
-from devscope_bridge.orchestrator_config import OrchestratorConfig
+from devscope_bridge.orchestrator_config import OrchestratorConfig, OrchestratorSettings
 
 
 @pytest.fixture(autouse=True)
@@ -39,3 +39,13 @@ async def test_schedule_pass_ignores_non_schedule_ready_tasks():
     n = await orchestrator.run_schedule_pass(runner, OrchestratorConfig(max_workers=3))
     assert n == 0 and runner.calls == []
     assert task_store.get_task(tid)["status"] == "ready"  # untouched; run_tick owns it
+
+
+def test_should_run_schedule_pass_false_when_paused():
+    assert orchestrator._should_run_schedule_pass(
+        OrchestratorSettings(paused=True)) is False
+
+
+def test_should_run_schedule_pass_true_when_not_paused():
+    assert orchestrator._should_run_schedule_pass(
+        OrchestratorSettings(paused=False)) is True

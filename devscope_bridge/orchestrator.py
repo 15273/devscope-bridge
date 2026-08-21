@@ -231,6 +231,13 @@ async def run_schedule_pass(runner, cfg: OrchestratorConfig, now: str | None = N
 _tick_no = 0
 
 
+def _should_run_schedule_pass(settings: "orchestrator_config.OrchestratorSettings") -> bool:
+    """Whether a schedule sub-loop slice should dispatch — false while paused
+    (manual pause or the auto-pause quota safety), so a pause takes effect
+    within one slice instead of waiting out the full tick interval."""
+    return not settings.paused
+
+
 def _maybe_sync_external_board() -> None:
     """Fire-and-forget external-board sync every N ticks (a Notion NL round trip
     can take minutes and must never stretch the tick). Opt-in via employee config."""
@@ -341,6 +348,10 @@ async def _loop(runner) -> None:
             await asyncio.sleep(slice_s)
             elapsed += slice_s
             if elapsed < settings.tick_seconds:
+                fresh_settings = orchestrator_config.load()
+                if not _should_run_schedule_pass(fresh_settings):
+                    logger.debug("orchestrator paused — skipping schedule pass slice")
+                    continue
                 try:
                     await run_schedule_pass(runner, cfg)
                 except Exception:
