@@ -202,6 +202,32 @@ async def run_tick(
     _maybe_sync_external_board()
 
 
+SCHEDULE_PASS_SECONDS = 60
+
+
+async def run_schedule_pass(runner, cfg: OrchestratorConfig, now: str | None = None) -> int:
+    """Lightweight sub-tick: materialise due schedules and dispatch ONLY
+    schedule-born ready workers. The heavy run_tick still owns triage/rollup.
+
+    Dispatch stays synchronous (awaited), matching run_tick's existing
+    behavior — a long browser worker already stalls run_tick's own dispatch
+    loop today, so this is no regression. Wrapping in asyncio.create_task
+    would add concurrency-cap bookkeeping (tracking in-flight tasks so a
+    later pass doesn't double-count capacity) for a problem that hasn't been
+    observed in practice; revisit only if tests show it matters.
+    """
+    oc.materialise_due_schedules(now=now)
+    b = oc.collect()
+    running = oc.running_worker_count(b)
+    dispatched = 0
+    for task in oc.select_ready_workers(b, running, cfg.max_workers):
+        if not task.get("schedule_id"):
+            continue
+        await _dispatch_worker(runner, task)
+        dispatched += 1
+    return dispatched
+
+
 _tick_no = 0
 
 
@@ -308,7 +334,17 @@ async def _loop(runner) -> None:
             await run_tick(runner, cfg, throttle_info=throttle)
         except Exception:  # never let one bad tick kill the loop
             logger.exception("orchestrator tick failed")
-        await asyncio.sleep(settings.tick_seconds)
+
+        elapsed = 0
+        while elapsed < settings.tick_seconds:
+            slice_s = min(SCHEDULE_PASS_SECONDS, settings.tick_seconds - elapsed)
+            await asyncio.sleep(slice_s)
+            elapsed += slice_s
+            if elapsed < settings.tick_seconds:
+                try:
+                    await run_schedule_pass(runner, cfg)
+                except Exception:
+                    logger.exception("schedule pass failed")
 
 
 def start_loop(runner, cfg: OrchestratorConfig | None = None) -> None:
