@@ -544,6 +544,25 @@ def finish_schedule_run(
                      (*sets.values(), run_id))
 
 
+def set_run_question(run_id: int, question_text: str,
+                     importance: str = "important") -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE schedule_runs SET status='waiting_user', question_text=?, "
+            "question_importance=? WHERE id=?",
+            (question_text, importance, run_id),
+        )
+
+
+def set_run_answered(run_id: int, answered_by: str, answer_text: str) -> None:
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE schedule_runs SET status='running', answered_by=?, answer_text=? "
+            "WHERE id=?",
+            (answered_by, answer_text, run_id),
+        )
+
+
 def get_schedule_run(run_id: int) -> dict | None:
     with _connect() as conn:
         row = conn.execute("SELECT * FROM schedule_runs WHERE id=?", (run_id,)).fetchone()

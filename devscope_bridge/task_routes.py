@@ -115,6 +115,15 @@ def request_approval(task_id: str, body: ApprovalRequestBody) -> dict:
         task_id, task["title"], "awaiting_approval", task.get("domain"), body.action,
     )
     employee_comms.notify_question(task, body.action, body.payload)
+    if body.action == "question" and task.get("schedule_id"):
+        run = task_store.get_run_for_task(task_id)
+        if run and run["status"] == "running":
+            payload = body.payload or {}
+            task_store.set_run_question(
+                run["id"],
+                payload.get("question") or body.action,
+                importance=payload.get("importance") or "important",
+            )
     return {"approval_id": aid, "status": "awaiting_approval"}
 
 
@@ -137,6 +146,10 @@ def answer_question(task_id: str, body: AnswerBody) -> dict:
         status=new_status,
     )
     task_store.add_log(task_id, actor="user", message=f"answered: {body.answer[:200]}")
+    if task.get("schedule_id"):
+        run = task_store.get_run_for_task(task_id)
+        if run and run["status"] == "waiting_user":
+            task_store.set_run_answered(run["id"], "user", body.answer)
     board_relay.notify_task_update(
         task_id, task["title"], new_status, task.get("domain"), "question answered",
     )
