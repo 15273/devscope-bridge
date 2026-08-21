@@ -14,6 +14,7 @@ class ScheduleTemplateBody(BaseModel):
     domain: str | None = None
     instruction: str | None = None
     autonomy: str | None = None
+    autonomy_policy: str | None = None
     agent: str = Field(default="claude", pattern="^(claude|cursor)$")
     mode: str | None = Field(default="act", pattern="^(act|plan|inspect|test)$")
     recurrence: dict[str, Any] = Field(default_factory=dict)

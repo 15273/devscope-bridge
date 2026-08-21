@@ -259,6 +259,17 @@ async def _dispatch_worker(runner, task: dict) -> None:
     task_store.update_task(task["id"], status="in_progress", assignee_session=name)
     task_store.add_log(task["id"], actor=name, message=f"dispatched ({agent}/{mode})")
     mark_long_running(name)
+    memory = policy = reports_path = ""
+    if task.get("schedule_id"):
+        from devscope_bridge import task_homes
+        sid = task["schedule_id"]
+        try:
+            memory = task_homes.read_memory(sid)
+            reports_path = str(task_homes.reports_dir(sid))
+        except OSError:
+            logger.warning("task home unavailable for schedule %s", sid)
+        sched = task_store.get_schedule(sid)
+        policy = ((sched or {}).get("template") or {}).get("autonomy_policy") or ""
     ok = False
     try:
         await session_hygiene.reset_for_fresh_turn(name)
@@ -268,7 +279,10 @@ async def _dispatch_worker(runner, task: dict) -> None:
                 task["id"], task["title"],
                 task.get("instruction") or task["title"],
                 autonomy=task.get("autonomy", "guarded"),
-                schedule_id=task.get("schedule_id")),
+                schedule_id=task.get("schedule_id"),
+                memory=memory,
+                autonomy_policy=policy,
+                reports_dir=reports_path),
             mode=mode,
             agent=agent,
             timeout_s=WORKER_TIMEOUT_S,
