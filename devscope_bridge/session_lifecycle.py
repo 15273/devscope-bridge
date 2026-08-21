@@ -111,7 +111,12 @@ async def stop_stale_turn_sweeper() -> None:
 # Headless chat supports AskUserQuestion via PermissionRequest cards in the UI.
 _INTERACTIVE_GUARD = (
     "When you need a structured choice from the user, use AskUserQuestion. "
-    "For open-ended follow-ups, ask in plain text and end your turn."
+    "For open-ended follow-ups, ask in plain text and end your turn. "
+    "If a tool call fails, hangs, or is blocked, do not keep retrying the same "
+    "tool — switch to a different tool that can do the job and continue. For "
+    "browser work prefer the browser-control MCP tools (the user's real Chrome "
+    "via DevScope); if those are unavailable or fail, fall back to WebFetch/"
+    "WebSearch or another browser tool rather than stalling the turn."
 )
 
 
