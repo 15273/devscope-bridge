@@ -55,6 +55,14 @@ export function presenceFor(latest: ScheduleRun | undefined): SchedulePresence {
   return 'success';
 }
 
+/** "22.8 09:05" from a bridge timestamp — for feed bubbles. */
+export function formatRunTime(at: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(at);
+  if (!m) return at;
+  const [, , mo, d, hh, mm] = m;
+  return `${Number(d)}.${Number(mo)} ${hh}:${mm}`;
+}
+
 /** "היום 09:00" / "מחר 09:00" / "24.8 09:00" from a bridge timestamp. */
 export function formatNextRun(nextRunAt: string | null | undefined, now: Date = new Date()): string {
   if (!nextRunAt) return 'לא מתוזמן';

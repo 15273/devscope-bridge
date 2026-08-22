@@ -19,7 +19,7 @@ import {
   type SchedulePlaybook,
   type ScheduleRun,
 } from '../bridge';
-import { buildFeed, formatNextRun, type FeedItem } from '../utils/scheduleFeed';
+import { buildFeed, formatNextRun, formatRunTime, type FeedItem } from '../utils/scheduleFeed';
 
 interface ScheduleChatPanelProps {
   schedule: ScheduleEntry;
@@ -201,7 +201,7 @@ function FeedBubble({
             {path.split('/').pop()}
           </span>
         ))}
-        <span className="mr-auto text-2xs text-fg-subtle">{item.at.slice(5, 16)}</span>
+        <span className="mr-auto text-2xs text-fg-subtle">{formatRunTime(item.at)}</span>
         {item.logSession && (
           <button type="button" onClick={() => onOpenSession(item.logSession!)}
             className="text-2xs text-fg-subtle underline hover:text-fg">
