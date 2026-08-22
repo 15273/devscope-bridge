@@ -21,13 +21,22 @@ class ScheduleTemplateBody(BaseModel):
 
 
 class ScheduleSetupStartBody(BaseModel):
-    title: str
-    goal: str
-    entry_url: str
+    title: str = "משימה חדשה"
+    goal: str = ""
+    entry_url: str = ""
     domain: str = "browser"
     agent: str = Field(default="claude", pattern="^(claude|cursor)$")
     setup_mode: str = Field(default="inspect", pattern="^(inspect|plan|act)$")
     instruction: str | None = None
+
+
+class ScheduleSetupMetaBody(BaseModel):
+    title: str | None = None
+    recurrence: dict[str, Any] | None = None
+    agent: str | None = Field(default=None, pattern="^(claude|cursor)$")
+    autonomy_policy: str | None = Field(default=None, max_length=4_000)
+    entry_url: str | None = None
+    goal: str | None = None
 
 
 class ScheduleSetupPatchBody(BaseModel):

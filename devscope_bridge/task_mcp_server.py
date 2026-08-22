@@ -171,6 +171,28 @@ async def schedule_setup_set_instruction(draft_id: str, instruction: str) -> dic
 
 
 @mcp.tool()
+async def schedule_setup_set_meta(draft_id: str, title: str | None = None,
+                                  recurrence: dict | None = None,
+                                  agent: str | None = None,
+                                  autonomy_policy: str | None = None,
+                                  entry_url: str | None = None,
+                                  goal: str | None = None) -> dict[str, Any]:
+    """Set schedule metadata on the in-progress setup draft. recurrence is one of
+    {"daily_at": "HH:MM"} | {"every_minutes": N} | {"weekly_at": {"day": 0-6, "time": "HH:MM"}}."""
+    body = {k: v for k, v in dict(title=title, recurrence=recurrence, agent=agent,
+            autonomy_policy=autonomy_policy, entry_url=entry_url, goal=goal).items()
+            if v is not None}
+    return await _call("POST", f"/schedules/setup/drafts/{draft_id}/meta", json_body=body)
+
+
+@mcp.tool()
+async def schedule_commit(draft_id: str) -> dict[str, Any]:
+    """Create the recurring schedule from the completed setup draft. Call ONLY after
+    the user explicitly confirms the summary in chat."""
+    return await _call("POST", f"/schedules/setup/drafts/{draft_id}/commit")
+
+
+@mcp.tool()
 async def schedule_run_report(schedule_id: int, task_id: str, digest: str,
                               artifacts: list[str] | None = None,
                               memory_note: str | None = None,

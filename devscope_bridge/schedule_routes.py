@@ -15,6 +15,7 @@ from devscope_bridge.schedule_models import (
     SchedulePlaybookPatchBody,
     ScheduleRunReportBody,
     ScheduleSetupInstructionBody,
+    ScheduleSetupMetaBody,
     ScheduleSetupPatchBody,
     ScheduleSetupStartBody,
     ScheduleUpdateBody,
@@ -55,12 +56,6 @@ async def discover_schedule_playbook(body: ScheduleDiscoverBody) -> dict:
     if not result.get("ok"):
         return {"ok": False, "error": result.get("error", "discover failed"), "data": result}
     return {"ok": True, "data": result}
-
-
-@router.get("/setup/active")
-def get_active_setup() -> dict:
-    draft = setup_svc.load_active()
-    return {"ok": True, "draft": draft}
 
 
 @router.post("/setup/start")
@@ -108,6 +103,24 @@ def patch_setup_instruction(draft_id: str, body: ScheduleSetupInstructionBody) -
     if not draft:
         raise HTTPException(status_code=404, detail="setup draft not found")
     return {"ok": True, "draft": draft}
+
+
+@router.post("/setup/drafts/{draft_id}/meta")
+def patch_setup_meta(draft_id: str, body: ScheduleSetupMetaBody) -> dict:
+    draft = setup_svc.set_meta(draft_id, body.model_dump(exclude_none=True))
+    if not draft:
+        raise HTTPException(status_code=404, detail="setup draft not found")
+    return {"ok": True, "draft": draft}
+
+
+@router.post("/setup/drafts/{draft_id}/commit")
+def commit_setup_draft(draft_id: str) -> dict:
+    sched, error = setup_svc.commit_draft(draft_id)
+    if error == "draft not found":
+        raise HTTPException(status_code=404, detail=error)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    return _enrich(sched)
 
 
 @router.post("/setup/drafts/{draft_id}/complete")

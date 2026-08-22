@@ -36,7 +36,6 @@ async def test_start_setup_creates_setup_dir(tmp_path, monkeypatch):
     """First draft write must create schedule_setups/ (not only active.json parent)."""
     setup_dir = tmp_path / "schedule_setups"
     monkeypatch.setattr(setup_svc, "_SETUP_DIR", setup_dir)
-    monkeypatch.setattr(setup_svc, "_ACTIVE_FILE", setup_dir / "active.json")
     assert not setup_dir.exists()
     with patch("devscope_bridge.schedule_setup.session_store.get_session", return_value=None):
         with patch("devscope_bridge.schedule_setup.session_store.create_session_metadata"):
@@ -52,7 +51,6 @@ async def test_start_setup_creates_setup_dir(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_start_setup_creates_draft(tmp_path, monkeypatch):
     monkeypatch.setattr(setup_svc, "_SETUP_DIR", tmp_path)
-    monkeypatch.setattr(setup_svc, "_ACTIVE_FILE", tmp_path / "active.json")
     with patch("devscope_bridge.schedule_setup.session_store.get_session", return_value=None):
         with patch("devscope_bridge.schedule_setup.session_store.create_session_metadata") as create:
             draft = await setup_svc.start_setup(
@@ -72,7 +70,6 @@ async def test_start_setup_creates_draft(tmp_path, monkeypatch):
 
 def test_update_playbook_merges(tmp_path, monkeypatch):
     monkeypatch.setattr(setup_svc, "_SETUP_DIR", tmp_path)
-    monkeypatch.setattr(setup_svc, "_ACTIVE_FILE", tmp_path / "active.json")
     draft = {"id": "abc12345", "session_name": "sched-setup-abc12345", "playbook": {"workflow": ["a"]}, "status": "active"}
     setup_svc._persist_draft(draft)
     updated = setup_svc.update_playbook("abc12345", {"selectors": {"btn": ".x"}})
