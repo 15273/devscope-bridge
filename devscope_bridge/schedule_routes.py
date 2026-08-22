@@ -18,6 +18,7 @@ from devscope_bridge.schedule_models import (
     ScheduleSetupMetaBody,
     ScheduleSetupPatchBody,
     ScheduleSetupStartBody,
+    ScheduleStewardBody,
     ScheduleUpdateBody,
 )
 from devscope_bridge.schedule_discover import discover_playbook
@@ -222,6 +223,14 @@ def run_now(schedule_id: int) -> dict:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     task_store.set_schedule_next_run(schedule_id, now)
     return {"ok": True, "next_run_at": now}
+
+
+@router.post("/{schedule_id}/steward")
+async def steward(schedule_id: int, body: ScheduleStewardBody) -> dict:
+    result = await setup_svc.steward_message(schedule_id, body.message)
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail=result.get("error", "steward failed"))
+    return result
 
 
 @router.post("/{schedule_id}/playbook")

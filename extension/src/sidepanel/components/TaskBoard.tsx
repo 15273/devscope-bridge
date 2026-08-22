@@ -317,6 +317,7 @@ export function TaskBoard({
           schedules={board.schedules ?? []}
           onRefresh={onRefresh}
           onNewSchedule={() => setShowNewSchedule(true)}
+          onOpenSession={onOpenWorkerSession}
         />
       )}
       {board && tab === 'board' && (

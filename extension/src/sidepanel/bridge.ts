@@ -1036,6 +1036,26 @@ export async function fetchScheduleReports(scheduleId: number): Promise<Schedule
   }
 }
 
+/** Open (or reuse) the per-schedule steward chat; returns its session name. */
+export async function startScheduleSteward(
+  scheduleId: number,
+  message: string,
+): Promise<string | null> {
+  try {
+    const token = await getToken();
+    const res = await bridgeFetch(`${BRIDGE_HTTP}/schedules/${scheduleId}/steward`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify({ message }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { session_name: string };
+    return data.session_name ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function setScheduleEnabled(scheduleId: number, enabled: boolean): Promise<boolean> {
   return (await patchSchedule(scheduleId, { enabled })) !== null;
 }

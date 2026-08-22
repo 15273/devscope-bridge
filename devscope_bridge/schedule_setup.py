@@ -251,6 +251,68 @@ def commit_draft(draft_id: str) -> tuple[dict[str, Any] | None, str | None]:
     return task_store.get_schedule(sid), None
 
 
+_STEWARD_SYSTEM = (
+    "You ARE this recurring DevScope task — 'העובד' — chatting with your manager (the "
+    "user). Speak natural Hebrew, first person, short and human, like a colleague "
+    "answering a ping. No system-log tone.\n\n"
+    "You can: answer questions about past runs from the digests below, read and update "
+    "your memory (schedule_memory_read / schedule_memory_write), and improve your "
+    "playbook (schedule_playbook_update). If the user asks to change what or when you "
+    "run, summarize the requested change and note that it will apply from the next run.\n"
+    "Do NOT perform the task itself in this chat — runs happen on schedule."
+)
+
+
+def build_steward_prompt(sched: dict[str, Any], memory: str,
+                         digests: list[str], message: str) -> str:
+    tmpl = sched.get("template") or {}
+    digest_block = "\n".join(f"- {d}" for d in digests) or "(אין עדיין ריצות)"
+    return (
+        f"{_STEWARD_SYSTEM}\n\n"
+        f"Schedule ID: {sched['id']}\n"
+        f"Title: {sched.get('title', '')}\n"
+        f"Instruction: {tmpl.get('instruction', '')}\n"
+        f"Recurrence: {json.dumps(tmpl.get('recurrence') or {}, ensure_ascii=False)}\n"
+        f"Autonomy policy: {tmpl.get('autonomy_policy') or '(לא הוגדרה)'}\n"
+        f"Next run: {sched.get('next_run_at') or '—'}\n\n"
+        f"## Memory (MEMORY.md)\n{memory or '(ריק)'}\n\n"
+        f"## Last run digests\n{digest_block}\n\n"
+        f"## הודעה מהמשתמש\n{message}"
+    )
+
+
+async def steward_message(schedule_id: int, message: str) -> dict[str, Any]:
+    """Open (or reuse) the per-schedule steward chat and send the user's message
+    with full task context. Mirrors bootstrap_session's structure."""
+    from devscope_bridge import task_homes, task_store
+
+    sched = task_store.get_schedule(schedule_id)
+    if not sched:
+        return {"ok": False, "error": "schedule not found"}
+    session_name = f"sched-steward-{schedule_id}"
+    tmpl = sched.get("template") or {}
+    if session_store.get_session(session_name) is None:
+        session_store.create_session_metadata(
+            session_name,
+            agent=tmpl.get("agent") or "claude",
+            cwd=session_store.DEFAULT_CWD,
+            mode="act",
+            purpose="schedule_steward",
+        )
+    try:
+        memory = task_homes.read_memory(schedule_id)
+    except OSError:
+        memory = ""
+    digests = [
+        f"{r.get('finished_at') or r.get('started_at')}: {r.get('digest_text')}"
+        for r in task_store.list_schedule_runs(schedule_id, limit=5)
+        if r.get("digest_text")
+    ]
+    prompt = build_steward_prompt(sched, memory, digests, message)
+    await session_manager.run_prompt(session_name, prompt, mode="act")
+    return {"ok": True, "session_name": session_name}
+
+
 def runtime_from_schedule_template(tmpl: dict[str, Any]) -> tuple[str, str]:
     agent = tmpl.get("agent") or "claude"
     if agent not in ("claude", "cursor"):

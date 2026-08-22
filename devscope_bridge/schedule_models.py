@@ -81,6 +81,10 @@ class ScheduleMemoryBody(BaseModel):
     content: str = Field(max_length=64_000)
 
 
+class ScheduleStewardBody(BaseModel):
+    message: str = Field(max_length=8_000)
+
+
 class ScheduleDiscoverBody(BaseModel):
     entry_url: str
     goal: str
