@@ -62,14 +62,14 @@ class SchedulePlaybookPatchBody(BaseModel):
 
 class ScheduleRunReportBody(BaseModel):
     task_id: str
-    digest: str
-    artifacts: list[str] = Field(default_factory=list)
-    memory_note: str | None = None
+    digest: str = Field(max_length=4_000)
+    artifacts: list[str] = Field(default_factory=list, max_length=50)
+    memory_note: str | None = Field(default=None, max_length=2_000)
     status: str = Field(default="success", pattern="^(success|failed)$")
 
 
 class ScheduleMemoryBody(BaseModel):
-    content: str
+    content: str = Field(max_length=64_000)
 
 
 class ScheduleDiscoverBody(BaseModel):

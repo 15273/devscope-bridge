@@ -225,6 +225,11 @@ async def run_schedule_pass(runner, cfg: OrchestratorConfig, now: str | None = N
             continue
         await _dispatch_worker(runner, task)
         dispatched += 1
+    try:
+        from devscope_bridge import chief_agent
+        await chief_agent.sweep(now=now)
+    except Exception:
+        logger.exception("chief-agent sweep failed")
     return dispatched
 
 
