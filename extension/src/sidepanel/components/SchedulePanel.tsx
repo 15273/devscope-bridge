@@ -13,6 +13,8 @@ interface SchedulePanelProps {
   onRefresh: () => void;
   onNewSchedule: () => void;
   onOpenSession: (sessionName: string) => void;
+  focusScheduleId?: number | null;
+  onFocusHandled?: () => void;
 }
 
 const PRESENCE_DOT: Record<SchedulePresence, string> = {
@@ -24,9 +26,17 @@ const PRESENCE_DOT: Record<SchedulePresence, string> = {
 };
 
 export function SchedulePanel({
-  schedules, onRefresh, onNewSchedule, onOpenSession,
+  schedules, onRefresh, onNewSchedule, onOpenSession, focusScheduleId, onFocusHandled,
 }: SchedulePanelProps) {
   const [selectedId, setSelectedId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (focusScheduleId != null) {
+      setSelectedId(focusScheduleId);
+      onFocusHandled?.();
+    }
+  }, [focusScheduleId, onFocusHandled]);
+
   const [latestRuns, setLatestRuns] = useState<Record<number, ScheduleRun | undefined>>({});
   const selected = schedules.find((s) => s.id === selectedId) ?? null;
 

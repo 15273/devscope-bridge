@@ -42,6 +42,7 @@ import { setStreamDebugEnabled } from './utils/streamDebug';
 import { findPendingPermission } from './store/sessionStore';
 import { deriveWorkingState, shouldWarnCompact } from './utils/workingState';
 import { DecisionPanel } from './components/DecisionPanel';
+import { ScheduleDraftCard } from './components/ScheduleDraftCard';
 import { TabPickBanner } from './components/TabPickBanner';
 import { SessionCoachBanner } from './components/SessionCoachBanner';
 import { CompactBanner } from './components/CompactBanner';
@@ -100,6 +101,7 @@ export function App() {
   const [showGlossary, setShowGlossary] = useState(false);
   const [showNewModal, setShowNewModal] = useState(false);
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
+  const [focusScheduleId, setFocusScheduleId] = useState<number | null>(null);
   const [taskDomainFilter, setTaskDomainFilter] = useState<string | null>(null);
   const [openTerminal, setOpenTerminal] = useState<OpenTerminal | null>(null);
   const [recNow, setRecNow] = useState(0);
@@ -541,6 +543,15 @@ export function App() {
               )}
                 </>
               )}
+              {activeSession.purpose === 'schedule_setup' && (
+                <ScheduleDraftCard
+                  sessionName={activeSession.name}
+                  onOpenScheduleChat={(scheduleId) => {
+                    setFocusScheduleId(scheduleId);
+                    dispatch({ type: 'SET_VIEW', view: 'tasks' });
+                  }}
+                />
+              )}
               {/* Composer stays visible in terminal overlay too — tools (attach/mic/mode) still useful. */}
               <Composer
                 sessionName={activeSession.name}
@@ -577,13 +588,14 @@ export function App() {
             loading={taskBoard.loading}
             error={taskBoard.error}
             sessionNames={sessions.map((s) => s.name)}
-            activeSession={state.activeSession}
             onOpenSetupChat={(name, agent) => void openScheduleSetupChat(name, agent)}
             domainFilter={taskDomainFilter}
             onDomainFilterChange={setTaskDomainFilter}
             onRefresh={() => void taskBoard.refresh()}
             onNewTask={handleNewTask}
             onOpenWorkerSession={openWorkerSession}
+            focusScheduleId={focusScheduleId}
+            onFocusScheduleHandled={() => setFocusScheduleId(null)}
           />
         ) : state.view === 'email' ? (
           <EmailCockpit />

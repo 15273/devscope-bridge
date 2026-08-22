@@ -9,20 +9,21 @@ import { formatTaskUsageChip } from '../utils/taskUsageFormat';
 import { TaskApprovalPanel } from './TaskApprovalPanel';
 import { TaskDetailPanel } from './TaskDetailPanel';
 import { SchedulePanel } from './SchedulePanel';
-import { NewScheduleModal } from './NewScheduleModal';
+import { bootstrapScheduleSetup, startSetup } from '../integrations/scheduleSetup';
 
 interface TaskBoardProps {
   board: TaskBoardSnapshot | null;
   loading: boolean;
   error: string | null;
   sessionNames: string[];
-  activeSession: string | null;
   onOpenSetupChat: (setupSessionName: string, agent: Agent) => void;
   domainFilter: string | null;
   onDomainFilterChange: (domain: string | null) => void;
   onRefresh: () => void;
   onNewTask: () => void;
   onOpenWorkerSession: (sessionName: string) => void;
+  focusScheduleId?: number | null;
+  onFocusScheduleHandled?: () => void;
 }
 
 const DOMAIN_OPTIONS = ['', 'browser', 'research', 'dev'] as const;
@@ -234,17 +235,33 @@ export function TaskBoard({
   loading,
   error,
   sessionNames,
-  activeSession,
   onOpenSetupChat,
   domainFilter,
   onDomainFilterChange,
   onRefresh,
   onNewTask,
   onOpenWorkerSession,
+  focusScheduleId,
+  onFocusScheduleHandled,
 }: TaskBoardProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<'board' | 'schedules'>('board');
-  const [showNewSchedule, setShowNewSchedule] = useState(false);
+  const [creatingSchedule, setCreatingSchedule] = useState(false);
+
+  useEffect(() => {
+    if (focusScheduleId != null) setTab('schedules');
+  }, [focusScheduleId]);
+
+  const startChatFirstSetup = async () => {
+    if (creatingSchedule) return;
+    setCreatingSchedule(true);
+    const draft = await startSetup();
+    if (draft) {
+      void bootstrapScheduleSetup(draft.id);
+      onOpenSetupChat(draft.session_name, draft.agent);
+    }
+    setCreatingSchedule(false);
+  };
   const groups = useMemo(() => groupTasks(board?.tasks ?? []), [board?.tasks]);
   const knownSessions = useMemo(() => new Set(sessionNames), [sessionNames]);
   const childTasks = useMemo(
@@ -297,10 +314,11 @@ export function TaskBoard({
           ) : (
             <button
               type="button"
-              onClick={() => setShowNewSchedule(true)}
-              className="rounded-md bg-signal px-2.5 py-1 text-xs font-medium text-signal-contrast hover:opacity-90"
+              disabled={creatingSchedule}
+              onClick={() => void startChatFirstSetup()}
+              className="rounded-md bg-signal px-2.5 py-1 text-xs font-medium text-signal-contrast hover:opacity-90 disabled:opacity-50"
             >
-              תזמון חדש
+              {creatingSchedule ? 'פותח שיחה…' : '+ משימה חדשה'}
             </button>
           )}
         </div>
@@ -316,8 +334,10 @@ export function TaskBoard({
         <SchedulePanel
           schedules={board.schedules ?? []}
           onRefresh={onRefresh}
-          onNewSchedule={() => setShowNewSchedule(true)}
+          onNewSchedule={() => void startChatFirstSetup()}
           onOpenSession={onOpenWorkerSession}
+          focusScheduleId={focusScheduleId}
+          onFocusHandled={onFocusScheduleHandled}
         />
       )}
       {board && tab === 'board' && (
@@ -348,14 +368,6 @@ export function TaskBoard({
             </div>
           )}
         </>
-      )}
-      {showNewSchedule && (
-        <NewScheduleModal
-          sessionName={activeSession}
-          onOpenSetupChat={onOpenSetupChat}
-          onClose={() => setShowNewSchedule(false)}
-          onCreated={onRefresh}
-        />
       )}
     </div>
   );
