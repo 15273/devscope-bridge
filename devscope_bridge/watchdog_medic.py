@@ -32,6 +32,7 @@ from devscope_bridge import session_manager
 from devscope_bridge import session_reader
 from devscope_bridge import session_store
 from devscope_bridge.models import AgentActivity, AiChunk, WatchdogReport
+from devscope_bridge import session_lifecycle
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +163,7 @@ async def _spawn_medic_proc() -> asyncio.subprocess.Process:
         stderr=asyncio.subprocess.PIPE,
         cwd=str(_REPO_ROOT),
         env=session_manager.subscription_env(),
+        limit=session_lifecycle.STREAM_LINE_LIMIT,
     )
 
 

@@ -52,7 +52,6 @@ def test_create_and_patch_playbook(client):
 def test_setup_start_creates_draft(client, tmp_path, monkeypatch):
     setup_dir = tmp_path / "schedule_setups"
     monkeypatch.setattr(setup_svc, "_SETUP_DIR", setup_dir)
-    monkeypatch.setattr(setup_svc, "_ACTIVE_FILE", setup_dir / "active.json")
     with patch("devscope_bridge.schedule_setup.session_store.get_session", return_value=None):
         with patch("devscope_bridge.schedule_setup.session_store.create_session_metadata"):
             res = client.post(

@@ -371,19 +371,31 @@ def _target_session(tool: str, args: dict[str, Any], requesting: str) -> str:
     return requesting
 
 
+def resolve_requesting_session(requested: str | None) -> str:
+    """Resolve which WS session serves this action.
+
+    Exact match wins; otherwise ANY active extension WS serves the request —
+    scheduled worker-* sessions have no panel of their own, and per-tab profile
+    routing in _target_session still redirects to the right profile afterwards.
+    """
+    requesting = requested or first_active_session()
+    if requesting is not None and has_active_ws(requesting):
+        return requesting
+    fallback = first_active_session()
+    if fallback is not None:
+        return fallback
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            f"Browser client not connected (session={requested!r}, connected=[]). "
+            "Reload DevScope unpacked from extension/dist or open the side panel."
+        ),
+    )
+
+
 async def post_action(body: ActionRequest, auth: None) -> dict:
     """Forward a browser tool call to the Chrome extension via the active WS."""
-    requesting = body.session or first_active_session()
-    if requesting is None or not has_active_ws(requesting):
-        connected = list(_active_ws.keys())
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                f"Browser client not connected (session={body.session!r}, "
-                f"connected={connected}). Reload DevScope unpacked from "
-                "extension/dist or open the side panel."
-            ),
-        )
+    requesting = resolve_requesting_session(body.session)
 
     # browser_list_tabs aggregates across every connected profile.
     if body.tool == "browser_list_tabs":

@@ -46,7 +46,8 @@ class BridgeSessionRunner:
         """
         if agent not in ("claude", "cursor"):
             agent = "claude"
-        if session_store.get_session(name) is None:
+        stored = session_store.get_session(name)
+        if stored is None:
             session_store.create_session_metadata(
                 name=name,
                 agent=agent,
@@ -54,6 +55,8 @@ class BridgeSessionRunner:
                 mode=mode,
                 purpose=_purpose_for_session(name),
             )
+        elif stored.get("agent") != agent:
+            session_store.set_session_agent(name, agent)
         await session_manager.run_prompt(name, prompt, mode=mode)
         return await self._await_turn(name, timeout_s)
 

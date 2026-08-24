@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 
-from devscope_bridge import task_store
+from devscope_bridge import task_homes, task_store
 from devscope_bridge.schedule_models import (
     ScheduleCreateBody,
     ScheduleDiscoverBody,
+    ScheduleMemoryBody,
     SchedulePlaybookPatchBody,
+    ScheduleRunReportBody,
     ScheduleSetupInstructionBody,
+    ScheduleSetupMetaBody,
     ScheduleSetupPatchBody,
     ScheduleSetupStartBody,
+    ScheduleStewardBody,
     ScheduleUpdateBody,
 )
 from devscope_bridge.schedule_discover import discover_playbook
@@ -52,12 +57,6 @@ async def discover_schedule_playbook(body: ScheduleDiscoverBody) -> dict:
     if not result.get("ok"):
         return {"ok": False, "error": result.get("error", "discover failed"), "data": result}
     return {"ok": True, "data": result}
-
-
-@router.get("/setup/active")
-def get_active_setup() -> dict:
-    draft = setup_svc.load_active()
-    return {"ok": True, "draft": draft}
 
 
 @router.post("/setup/start")
@@ -107,6 +106,24 @@ def patch_setup_instruction(draft_id: str, body: ScheduleSetupInstructionBody) -
     return {"ok": True, "draft": draft}
 
 
+@router.post("/setup/drafts/{draft_id}/meta")
+def patch_setup_meta(draft_id: str, body: ScheduleSetupMetaBody) -> dict:
+    draft = setup_svc.set_meta(draft_id, body.model_dump(exclude_none=True))
+    if not draft:
+        raise HTTPException(status_code=404, detail="setup draft not found")
+    return {"ok": True, "draft": draft}
+
+
+@router.post("/setup/drafts/{draft_id}/commit")
+def commit_setup_draft(draft_id: str) -> dict:
+    sched, error = setup_svc.commit_draft(draft_id)
+    if error == "draft not found":
+        raise HTTPException(status_code=404, detail=error)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    return _enrich(sched)
+
+
 @router.post("/setup/drafts/{draft_id}/complete")
 def complete_setup_draft(draft_id: str) -> dict:
     draft = setup_svc.complete_draft(draft_id)
@@ -147,6 +164,73 @@ def update_schedule(schedule_id: int, body: ScheduleUpdateBody) -> dict:
     task_store.update_schedule(schedule_id, **fields)
     sched = task_store.get_schedule(schedule_id)
     return _enrich(sched) if sched else {}
+
+
+def _require_schedule(schedule_id: int) -> dict:
+    sched = task_store.get_schedule(schedule_id)
+    if sched is None:
+        raise HTTPException(status_code=404, detail="schedule not found")
+    return sched
+
+
+@router.get("/{schedule_id}/runs")
+def list_runs(schedule_id: int) -> dict:
+    _require_schedule(schedule_id)
+    return {"runs": task_store.list_schedule_runs(schedule_id)}
+
+
+@router.post("/{schedule_id}/runs/report")
+def report_run(schedule_id: int, body: ScheduleRunReportBody) -> dict:
+    _require_schedule(schedule_id)
+    run = task_store.get_run_for_task(body.task_id)
+    if run is None or run["schedule_id"] != schedule_id:
+        raise HTTPException(status_code=404, detail="run not found for task")
+    if run["status"] != "running":
+        return {"ok": True, "already_closed": True, "run_id": run["id"]}
+    task_store.finish_schedule_run(
+        run["id"],
+        status=body.status,
+        digest_text=body.digest,
+        artifacts=body.artifacts,
+    )
+    if body.memory_note:
+        task_homes.append_memory(schedule_id, body.memory_note)
+    return {"ok": True, "run_id": run["id"]}
+
+
+@router.get("/{schedule_id}/memory")
+def get_memory(schedule_id: int) -> dict:
+    _require_schedule(schedule_id)
+    return {"memory": task_homes.read_memory(schedule_id)}
+
+
+@router.put("/{schedule_id}/memory")
+def put_memory(schedule_id: int, body: ScheduleMemoryBody) -> dict:
+    _require_schedule(schedule_id)
+    task_homes.write_memory(schedule_id, body.content)
+    return {"ok": True}
+
+
+@router.get("/{schedule_id}/reports")
+def list_run_reports(schedule_id: int) -> dict:
+    _require_schedule(schedule_id)
+    return {"reports": task_homes.list_reports(schedule_id)}
+
+
+@router.post("/{schedule_id}/run")
+def run_now(schedule_id: int) -> dict:
+    _require_schedule(schedule_id)
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    task_store.set_schedule_next_run(schedule_id, now)
+    return {"ok": True, "next_run_at": now}
+
+
+@router.post("/{schedule_id}/steward")
+async def steward(schedule_id: int, body: ScheduleStewardBody) -> dict:
+    result = await setup_svc.steward_message(schedule_id, body.message)
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail=result.get("error", "steward failed"))
+    return result
 
 
 @router.post("/{schedule_id}/playbook")

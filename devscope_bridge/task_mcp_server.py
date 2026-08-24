@@ -170,6 +170,54 @@ async def schedule_setup_set_instruction(draft_id: str, instruction: str) -> dic
                        json_body={"instruction": instruction})
 
 
+@mcp.tool()
+async def schedule_setup_set_meta(draft_id: str, title: str | None = None,
+                                  recurrence: dict | None = None,
+                                  agent: str | None = None,
+                                  autonomy_policy: str | None = None,
+                                  entry_url: str | None = None,
+                                  goal: str | None = None) -> dict[str, Any]:
+    """Set schedule metadata on the in-progress setup draft. recurrence is one of
+    {"daily_at": "HH:MM"} | {"every_minutes": N} | {"weekly_at": {"day": 0-6, "time": "HH:MM"}}."""
+    body = {k: v for k, v in dict(title=title, recurrence=recurrence, agent=agent,
+            autonomy_policy=autonomy_policy, entry_url=entry_url, goal=goal).items()
+            if v is not None}
+    return await _call("POST", f"/schedules/setup/drafts/{draft_id}/meta", json_body=body)
+
+
+@mcp.tool()
+async def schedule_commit(draft_id: str) -> dict[str, Any]:
+    """Create the recurring schedule from the completed setup draft. Call ONLY after
+    the user explicitly confirms the summary in chat."""
+    return await _call("POST", f"/schedules/setup/drafts/{draft_id}/commit")
+
+
+@mcp.tool()
+async def schedule_run_report(schedule_id: int, task_id: str, digest: str,
+                              artifacts: list[str] | None = None,
+                              memory_note: str | None = None,
+                              status: str = "success") -> dict[str, Any]:
+    """MANDATORY at the end of every scheduled run: short Hebrew digest of what
+    happened, artifact paths written under the task home, and optionally one
+    memory note worth keeping for future runs."""
+    return await _call("POST", f"/schedules/{schedule_id}/runs/report", json_body={
+        "task_id": task_id, "digest": digest, "artifacts": artifacts or [],
+        "memory_note": memory_note, "status": status})
+
+
+@mcp.tool()
+async def schedule_memory_read(schedule_id: int) -> dict[str, Any]:
+    """Read this recurring task's persistent MEMORY.md."""
+    return await _call("GET", f"/schedules/{schedule_id}/memory")
+
+
+@mcp.tool()
+async def schedule_memory_write(schedule_id: int, content: str) -> dict[str, Any]:
+    """Rewrite this recurring task's persistent MEMORY.md (full replace)."""
+    return await _call("PUT", f"/schedules/{schedule_id}/memory",
+                       json_body={"content": content})
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
     mcp.run(transport="stdio")

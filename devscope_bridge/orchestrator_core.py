@@ -149,17 +149,34 @@ def _now() -> str:
     return datetime.now().strftime(_TS_FMT)
 
 
-def _next_run_at(recurrence: dict, now: str) -> str:
+def _next_run_at(recurrence: dict, now: str, *, anchor: str | None = None) -> str:
     base = datetime.strptime(now, _TS_FMT)
+    anchor_dt = None
+    if anchor:
+        try:
+            anchor_dt = datetime.strptime(anchor, _TS_FMT)
+        except ValueError:
+            anchor_dt = None
     if "every_minutes" in recurrence:
-        return (base + timedelta(minutes=int(recurrence["every_minutes"]))).strftime(_TS_FMT)
+        step = timedelta(minutes=max(1, int(recurrence["every_minutes"])))
+        nxt = (anchor_dt or base) + step
+        while nxt <= base:          # skip slots missed while the bridge was down
+            nxt += step
+        return nxt.strftime(_TS_FMT)
     if "daily_at" in recurrence:
         hh, mm = (int(x) for x in recurrence["daily_at"].split(":"))
         nxt = base.replace(hour=hh, minute=mm, second=0)
-        if nxt <= base:
+        while nxt <= base:
             nxt += timedelta(days=1)
         return nxt.strftime(_TS_FMT)
-    # default: one hour out, prevents a missing recurrence from hot-looping
+    if "weekly_at" in recurrence:
+        spec = recurrence["weekly_at"]
+        hh, mm = (int(x) for x in str(spec.get("time", "09:00")).split(":"))
+        target_day = int(spec.get("day", 0))
+        nxt = base.replace(hour=hh, minute=mm, second=0)
+        while nxt <= base or nxt.weekday() != target_day:
+            nxt += timedelta(days=1)
+        return nxt.strftime(_TS_FMT)
     return (base + timedelta(hours=1)).strftime(_TS_FMT)
 
 
@@ -189,24 +206,25 @@ def materialise_due_schedules(now: str | None = None) -> int:
         if tmpl.get("builtin"):
             _run_builtin_schedule(tmpl["builtin"])
             task_store.set_schedule_next_run(
-                sched["id"], _next_run_at(tmpl.get("recurrence", {}), now))
+                sched["id"], _next_run_at(tmpl.get("recurrence", {}), now, anchor=sched.get("next_run_at")))
             continue
         playbook = parse_playbook(sched.get("playbook_json"))
         base_instruction = tmpl.get("instruction")
         instruction = build_scheduled_instruction(base_instruction, playbook)
         tid = task_store.create_task(
             title=tmpl.get("title", sched["title"]),
-            kind=tmpl.get("kind", "mom_task"),
+            kind="worker_unit",
             detail=tmpl.get("detail"),
             domain=tmpl.get("domain"),
             instruction=instruction,
             source="scheduled",
-            status="new",
+            status="ready",
             autonomy=tmpl.get("autonomy"),
             schedule_id=sched["id"],
         )
         task_store.add_log(tid, actor="scheduler",
                            message=f"materialised from schedule #{sched['id']}")
+        task_store.create_schedule_run(sched["id"], tid)
         recurrence = tmpl.get("recurrence", {})
-        task_store.set_schedule_next_run(sched["id"], _next_run_at(recurrence, now))
+        task_store.set_schedule_next_run(sched["id"], _next_run_at(recurrence, now, anchor=sched.get("next_run_at")))
     return len(due)

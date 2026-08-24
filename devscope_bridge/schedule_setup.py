@@ -14,40 +14,34 @@ from devscope_bridge.schedule_playbook import empty_playbook, merge_playbook, pa
 logger = logging.getLogger(__name__)
 
 _SETUP_DIR = Path.home() / ".dev-bridge" / "schedule_setups"
-_ACTIVE_FILE = _SETUP_DIR / "active.json"
 
 _SETUP_SYSTEM = (
-    "You help the user configure a RECURRING scheduled browser automation for DevScope.\n\n"
-    "Research the target site deeply using browser-control MCP (read-only during setup):\n"
+    "You are setting up a new RECURRING task ('עובד') for DevScope, in a chat with the "
+    "user. Speak natural Hebrew, like a colleague being onboarded — short messages, one "
+    "topic at a time, no forms and no bullet interrogations.\n\n"
+    "Find out conversationally:\n"
+    "  1. WHAT the task does each run (the per-run instruction).\n"
+    "  2. WHEN it runs — recurrence: {\"daily_at\": \"HH:MM\"} | {\"every_minutes\": N} | "
+    "{\"weekly_at\": {\"day\": 0-6, \"time\": \"HH:MM\"}}.\n"
+    "  3. WHERE it works (entry URL / site), if it touches the browser.\n"
+    "  4. Which engine runs it: claude or cursor.\n"
+    "  5. The autonomy policy — free text describing what the task may decide alone "
+    "and what must wait for the user (money, publishing, deletion are ALWAYS asked).\n\n"
+    "As facts land, keep the draft updated: schedule_setup_set_meta(draft_id, ...) for "
+    "title/recurrence/agent/autonomy_policy/entry_url/goal, "
+    "schedule_setup_set_instruction(draft_id, instruction) for the per-run instruction, "
+    "and schedule_setup_update(draft_id, patch) for playbook knowledge.\n\n"
+    "If a site is involved, research it with browser-control MCP (read-only during setup):\n"
     "  browser_list_tabs, browser_get_page_info, browser_navigate, browser_snapshot, "
-    "browser_get_elements\n\n"
+    "browser_get_elements\n"
     "Build a durable Playbook: workflow steps, CSS selectors, checklist, notes.\n"
     "Do NOT submit forms, post publicly, send messages, purchase, or delete.\n\n"
-    "Whenever the playbook improves, call schedule_setup_update(draft_id, patch).\n"
-    "When the per-run instruction is clear, call schedule_setup_set_instruction(draft_id, instruction).\n"
-    "Iterate with the user until they confirm the setup is complete."
+    "When everything is in place, summarize the setup in Hebrew and ask for explicit "
+    "confirmation. ONLY after the user confirms, call schedule_commit(draft_id)."
 )
 
 
-def _save_active(draft: dict[str, Any]) -> None:
-    _SETUP_DIR.mkdir(parents=True, exist_ok=True)
-    _ACTIVE_FILE.write_text(json.dumps(draft, ensure_ascii=False, indent=2), "utf-8")
-
-
-def load_active() -> dict[str, Any] | None:
-    if not _ACTIVE_FILE.exists():
-        return None
-    try:
-        data = json.loads(_ACTIVE_FILE.read_text("utf-8"))
-        return data if isinstance(data, dict) else None
-    except (json.JSONDecodeError, OSError):
-        return None
-
-
 def get_draft(draft_id: str) -> dict[str, Any] | None:
-    active = load_active()
-    if active and active.get("id") == draft_id:
-        return active
     path = _SETUP_DIR / f"{draft_id}.json"
     if not path.exists():
         return None
@@ -57,19 +51,25 @@ def get_draft(draft_id: str) -> dict[str, Any] | None:
         return None
 
 
+def find_draft_by_session(session_name: str) -> dict[str, Any] | None:
+    if not _SETUP_DIR.is_dir():
+        return None
+    for path in _SETUP_DIR.glob("*.json"):
+        try:
+            data = json.loads(path.read_text("utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if isinstance(data, dict) and data.get("session_name") == session_name:
+            return data
+    return None
+
+
 def _persist_draft(draft: dict[str, Any]) -> dict[str, Any]:
     draft_id = draft["id"]
     _SETUP_DIR.mkdir(parents=True, exist_ok=True)
     path = _SETUP_DIR / f"{draft_id}.json"
     path.write_text(json.dumps(draft, ensure_ascii=False, indent=2), "utf-8")
-    if draft.get("status") == "active":
-        _save_active(draft)
     return draft
-
-
-def clear_active() -> None:
-    if _ACTIVE_FILE.exists():
-        _ACTIVE_FILE.unlink()
 
 
 def _session_name(draft_id: str) -> str:
@@ -97,9 +97,9 @@ def build_bootstrap_prompt(draft: dict[str, Any]) -> str:
 
 async def start_setup(
     *,
-    title: str,
-    goal: str,
-    entry_url: str,
+    title: str = "משימה חדשה",
+    goal: str = "",
+    entry_url: str = "",
     domain: str = "browser",
     agent: str = "claude",
     setup_mode: str = "inspect",
@@ -123,6 +123,8 @@ async def start_setup(
         "agent": agent,
         "setup_mode": setup_mode,
         "runtime_mode": "act",
+        "recurrence": {},
+        "autonomy_policy": None,
         "playbook": empty_playbook(),
         "instruction": (instruction or "").strip() or None,
         "status": "active",
@@ -187,10 +189,128 @@ def complete_draft(draft_id: str) -> dict[str, Any] | None:
     if not draft:
         return None
     draft["status"] = "completed"
+    return _persist_draft(draft)
+
+
+_META_FIELDS = ("title", "recurrence", "agent", "autonomy_policy", "entry_url", "goal")
+
+
+def set_meta(draft_id: str, meta: dict[str, Any]) -> dict[str, Any] | None:
+    draft = get_draft(draft_id)
+    if not draft:
+        return None
+    for key in _META_FIELDS:
+        if key in meta and meta[key] is not None:
+            draft[key] = meta[key]
+    if meta.get("entry_url"):
+        pb = parse_playbook(draft.get("playbook"))
+        if meta["entry_url"] not in (pb.get("entry_urls") or []):
+            draft["playbook"] = merge_playbook(pb, {"entry_urls": [meta["entry_url"]]})
+    return _persist_draft(draft)
+
+
+def commit_draft(draft_id: str) -> tuple[dict[str, Any] | None, str | None]:
+    """Create the schedule from a completed draft. Returns (schedule, error)."""
+    from datetime import datetime
+
+    from devscope_bridge import task_store
+    from devscope_bridge.orchestrator_core import _next_run_at
+
+    draft = get_draft(draft_id)
+    if not draft:
+        return None, "draft not found"
+    instruction = (draft.get("instruction") or draft.get("goal") or "").strip()
+    if not instruction:
+        return None, "draft needs an instruction or goal before commit"
+    recurrence = draft.get("recurrence") or {}
+    if not recurrence:
+        return None, "draft needs a recurrence before commit"
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    template = {
+        "title": draft.get("title") or "משימה חדשה",
+        "kind": "worker_unit",
+        "detail": draft.get("goal") or None,
+        "domain": draft.get("domain") or "browser",
+        "instruction": instruction,
+        "autonomy": "guarded",
+        "autonomy_policy": draft.get("autonomy_policy"),
+        "agent": draft.get("agent") or "claude",
+        "mode": draft.get("runtime_mode") or "act",
+        "recurrence": recurrence,
+    }
+    sid = task_store.add_schedule(
+        title=template["title"],
+        template={k: v for k, v in template.items() if v is not None},
+        playbook=parse_playbook(draft.get("playbook")),
+        next_run_at=_next_run_at(recurrence, now),
+    )
+    draft["status"] = "committed"
+    draft["schedule_id"] = sid
     _persist_draft(draft)
-    if load_active() and load_active().get("id") == draft_id:
-        clear_active()
-    return draft
+    return task_store.get_schedule(sid), None
+
+
+_STEWARD_SYSTEM = (
+    "You ARE this recurring DevScope task — 'העובד' — chatting with your manager (the "
+    "user). Speak natural Hebrew, first person, short and human, like a colleague "
+    "answering a ping. No system-log tone.\n\n"
+    "You can: answer questions about past runs from the digests below, read and update "
+    "your memory (schedule_memory_read / schedule_memory_write), and improve your "
+    "playbook (schedule_playbook_update). If the user asks to change what or when you "
+    "run, summarize the requested change and note that it will apply from the next run.\n"
+    "Do NOT perform the task itself in this chat — runs happen on schedule."
+)
+
+
+def build_steward_prompt(sched: dict[str, Any], memory: str,
+                         digests: list[str], message: str) -> str:
+    tmpl = sched.get("template") or {}
+    digest_block = "\n".join(f"- {d}" for d in digests) or "(אין עדיין ריצות)"
+    return (
+        f"{_STEWARD_SYSTEM}\n\n"
+        f"Schedule ID: {sched['id']}\n"
+        f"Title: {sched.get('title', '')}\n"
+        f"Instruction: {tmpl.get('instruction', '')}\n"
+        f"Recurrence: {json.dumps(tmpl.get('recurrence') or {}, ensure_ascii=False)}\n"
+        f"Autonomy policy: {tmpl.get('autonomy_policy') or '(לא הוגדרה)'}\n"
+        f"Next run: {sched.get('next_run_at') or '—'}\n\n"
+        f"## Memory (MEMORY.md)\n{memory or '(ריק)'}\n\n"
+        f"## Last run digests\n{digest_block}\n\n"
+        f"## הודעה מהמשתמש\n{message}"
+    )
+
+
+async def steward_message(schedule_id: int, message: str) -> dict[str, Any]:
+    """Open (or reuse) the per-schedule steward chat and send the user's message
+    with full task context. Mirrors bootstrap_session's structure."""
+    from devscope_bridge import task_homes, task_store
+
+    sched = task_store.get_schedule(schedule_id)
+    if not sched:
+        return {"ok": False, "error": "schedule not found"}
+    session_name = f"sched-steward-{schedule_id}"
+    tmpl = sched.get("template") or {}
+    if session_store.get_session(session_name) is None:
+        session_store.create_session_metadata(
+            session_name,
+            agent=tmpl.get("agent") or "claude",
+            cwd=session_store.DEFAULT_CWD,
+            mode="act",
+            purpose="schedule_steward",
+        )
+    try:
+        memory = task_homes.read_memory(schedule_id)
+    except OSError:
+        memory = ""
+    digests = [
+        f"{r.get('finished_at') or r.get('started_at')}: {r.get('digest_text')}"
+        for r in task_store.list_schedule_runs(schedule_id, limit=5)
+        if r.get("digest_text")
+    ]
+    prompt = build_steward_prompt(sched, memory, digests, message)
+    await session_manager.run_prompt(session_name, prompt, mode="act")
+    return {"ok": True, "session_name": session_name}
 
 
 def runtime_from_schedule_template(tmpl: dict[str, Any]) -> tuple[str, str]:

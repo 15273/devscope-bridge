@@ -958,6 +958,108 @@ export async function patchSchedulePlaybook(
   }
 }
 
+export interface ScheduleRun {
+  id: number;
+  schedule_id: number;
+  task_id: string;
+  started_at: string;
+  finished_at: string | null;
+  status: 'running' | 'success' | 'failed' | 'waiting_user' | 'answered_by_chief';
+  digest_text: string | null;
+  question_text: string | null;
+  question_importance: string | null;
+  answered_by: string | null;
+  answer_text: string | null;
+  artifacts: string[];
+  log_session: string | null;
+}
+
+export async function fetchScheduleRuns(scheduleId: number): Promise<ScheduleRun[]> {
+  try {
+    const token = await getToken();
+    const res = await bridgeFetch(`${BRIDGE_HTTP}/schedules/${scheduleId}/runs`, {
+      headers: authHeaders(token),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { runs: ScheduleRun[] };
+    return data.runs ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function runScheduleNow(scheduleId: number): Promise<boolean> {
+  try {
+    const token = await getToken();
+    const res = await bridgeFetch(`${BRIDGE_HTTP}/schedules/${scheduleId}/run`, {
+      method: 'POST',
+      headers: authHeaders(token),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchScheduleMemory(scheduleId: number): Promise<string> {
+  try {
+    const token = await getToken();
+    const res = await bridgeFetch(`${BRIDGE_HTTP}/schedules/${scheduleId}/memory`, {
+      headers: authHeaders(token),
+    });
+    if (!res.ok) return '';
+    const data = (await res.json()) as { memory: string };
+    return data.memory ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export interface ScheduleReportFile {
+  name: string;
+  path: string;
+  size: number;
+  mtime: string;
+}
+
+export async function fetchScheduleReports(scheduleId: number): Promise<ScheduleReportFile[]> {
+  try {
+    const token = await getToken();
+    const res = await bridgeFetch(`${BRIDGE_HTTP}/schedules/${scheduleId}/reports`, {
+      headers: authHeaders(token),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { reports: ScheduleReportFile[] };
+    return data.reports ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/** Open (or reuse) the per-schedule steward chat; returns its session name. */
+export async function startScheduleSteward(
+  scheduleId: number,
+  message: string,
+): Promise<string | null> {
+  try {
+    const token = await getToken();
+    const res = await bridgeFetch(`${BRIDGE_HTTP}/schedules/${scheduleId}/steward`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify({ message }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { session_name: string };
+    return data.session_name ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setScheduleEnabled(scheduleId: number, enabled: boolean): Promise<boolean> {
+  return (await patchSchedule(scheduleId, { enabled })) !== null;
+}
+
 export async function deleteSchedule(scheduleId: number): Promise<boolean> {
   try {
     const token = await getToken();

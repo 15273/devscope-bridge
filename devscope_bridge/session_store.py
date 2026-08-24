@@ -122,6 +122,19 @@ def set_session_model(name: str, model: str | None) -> None:
     save_sessions(sessions)
 
 
+def set_session_agent(name: str, agent: str | None) -> None:
+    """Persist agent (engine) for a session; None clears to CLI default."""
+    sessions = load_sessions()
+    entry = sessions.get(name)
+    if entry is None:
+        raise KeyError(name)
+    if agent:
+        entry["agent"] = agent
+    else:
+        entry.pop("agent", None)
+    save_sessions(sessions)
+
+
 def set_session_claude_agent(name: str, claude_agent: str | None) -> None:
     """Persist Claude subagent slug (--agent); None clears to default agent."""
     sessions = load_sessions()

@@ -21,6 +21,7 @@ import uuid
 
 from devscope_bridge import session_manager
 from devscope_bridge.models import AiChunk, AiError, AskChunk, AskDone, AskStart
+from devscope_bridge import session_lifecycle
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ async def _spawn_ask_proc() -> asyncio.subprocess.Process:
         stderr=asyncio.subprocess.PIPE,
         cwd=session_manager.DEFAULT_CWD,
         env=session_manager.subscription_env(),
+        limit=session_lifecycle.STREAM_LINE_LIMIT,
     )
 
 

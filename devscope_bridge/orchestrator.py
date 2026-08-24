@@ -48,14 +48,20 @@ def reconcile_stuck_workers(now: str | None = None, *, stale_minutes: int = _STA
         age_min = (now_dt - updated).total_seconds() / 60.0
         if age_min < stale_minutes:
             continue
+        summary = (
+            "Worker ended without marking task done "
+            f"(auto-reconciled after {int(age_min)}m idle)"
+        )
         task_store.update_task(
             task["id"],
             status="failed",
-            result_summary=(
-                "Worker ended without marking task done "
-                f"(auto-reconciled after {int(age_min)}m idle)"
-            ),
+            result_summary=summary,
         )
+        if task.get("schedule_id"):
+            run = task_store.get_run_for_task(task["id"])
+            if run and run["status"] == "running":
+                task_store.finish_schedule_run(
+                    run["id"], status="failed", digest_text=summary)
         task_store.add_log(
             task["id"], actor="orchestrator",
             message=f"reconciled stale in_progress ({name})",
@@ -196,7 +202,45 @@ async def run_tick(
     _maybe_sync_external_board()
 
 
+SCHEDULE_PASS_SECONDS = 60
+
+
+async def run_schedule_pass(runner, cfg: OrchestratorConfig, now: str | None = None) -> int:
+    """Lightweight sub-tick: materialise due schedules and dispatch ONLY
+    schedule-born ready workers. The heavy run_tick still owns triage/rollup.
+
+    Dispatch stays synchronous (awaited), matching run_tick's existing
+    behavior — a long browser worker already stalls run_tick's own dispatch
+    loop today, so this is no regression. Wrapping in asyncio.create_task
+    would add concurrency-cap bookkeeping (tracking in-flight tasks so a
+    later pass doesn't double-count capacity) for a problem that hasn't been
+    observed in practice; revisit only if tests show it matters.
+    """
+    oc.materialise_due_schedules(now=now)
+    b = oc.collect()
+    running = oc.running_worker_count(b)
+    dispatched = 0
+    for task in oc.select_ready_workers(b, running, cfg.max_workers):
+        if not task.get("schedule_id"):
+            continue
+        await _dispatch_worker(runner, task)
+        dispatched += 1
+    try:
+        from devscope_bridge import chief_agent
+        await chief_agent.sweep(now=now)
+    except Exception:
+        logger.exception("chief-agent sweep failed")
+    return dispatched
+
+
 _tick_no = 0
+
+
+def _should_run_schedule_pass(settings: "orchestrator_config.OrchestratorSettings") -> bool:
+    """Whether a schedule sub-loop slice should dispatch — false while paused
+    (manual pause or the auto-pause quota safety), so a pause takes effect
+    within one slice instead of waiting out the full tick interval."""
+    return not settings.paused
 
 
 def _maybe_sync_external_board() -> None:
@@ -220,6 +264,17 @@ async def _dispatch_worker(runner, task: dict) -> None:
     task_store.update_task(task["id"], status="in_progress", assignee_session=name)
     task_store.add_log(task["id"], actor=name, message=f"dispatched ({agent}/{mode})")
     mark_long_running(name)
+    memory = policy = reports_path = ""
+    if task.get("schedule_id"):
+        from devscope_bridge import task_homes
+        sid = task["schedule_id"]
+        try:
+            memory = task_homes.read_memory(sid)
+            reports_path = str(task_homes.reports_dir(sid))
+        except OSError:
+            logger.warning("task home unavailable for schedule %s", sid)
+        sched = task_store.get_schedule(sid)
+        policy = ((sched or {}).get("template") or {}).get("autonomy_policy") or ""
     ok = False
     try:
         await session_hygiene.reset_for_fresh_turn(name)
@@ -229,7 +284,10 @@ async def _dispatch_worker(runner, task: dict) -> None:
                 task["id"], task["title"],
                 task.get("instruction") or task["title"],
                 autonomy=task.get("autonomy", "guarded"),
-                schedule_id=task.get("schedule_id")),
+                schedule_id=task.get("schedule_id"),
+                memory=memory,
+                autonomy_policy=policy,
+                reports_dir=reports_path),
             mode=mode,
             agent=agent,
             timeout_s=WORKER_TIMEOUT_S,
@@ -302,7 +360,21 @@ async def _loop(runner) -> None:
             await run_tick(runner, cfg, throttle_info=throttle)
         except Exception:  # never let one bad tick kill the loop
             logger.exception("orchestrator tick failed")
-        await asyncio.sleep(settings.tick_seconds)
+
+        elapsed = 0
+        while elapsed < settings.tick_seconds:
+            slice_s = min(SCHEDULE_PASS_SECONDS, settings.tick_seconds - elapsed)
+            await asyncio.sleep(slice_s)
+            elapsed += slice_s
+            if elapsed < settings.tick_seconds:
+                fresh_settings = orchestrator_config.load()
+                if not _should_run_schedule_pass(fresh_settings):
+                    logger.debug("orchestrator paused — skipping schedule pass slice")
+                    continue
+                try:
+                    await run_schedule_pass(runner, cfg)
+                except Exception:
+                    logger.exception("schedule pass failed")
 
 
 def start_loop(runner, cfg: OrchestratorConfig | None = None) -> None:

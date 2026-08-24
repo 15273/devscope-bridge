@@ -65,14 +65,22 @@ def update_task(task_id: str, body: TaskUpdateBody) -> dict:
         task_store.add_log(task_id, actor=fields.get("assignee_session") or "agent",
                            message=body.note)
     task = task_store.get_task(task_id)
-    if (
-        before
-        and task
-        and before.get("status") != "done"
-        and task.get("status") == "done"
-        and task.get("schedule_id")
-    ):
-        task_store.touch_schedule_run(int(task["schedule_id"]), task_id, success=True)
+    if before and task and task.get("schedule_id"):
+        prev_status = before.get("status")
+        new_status = task.get("status")
+        if prev_status != "done" and new_status == "done":
+            task_store.touch_schedule_run(int(task["schedule_id"]), task_id, success=True)
+            run = task_store.get_run_for_task(task_id)
+            if run and run["status"] == "running":
+                task_store.finish_schedule_run(
+                    run["id"], status="success",
+                    digest_text=task.get("result_summary") or None)
+        elif prev_status != "failed" and new_status == "failed":
+            run = task_store.get_run_for_task(task_id)
+            if run and run["status"] == "running":
+                task_store.finish_schedule_run(
+                    run["id"], status="failed",
+                    digest_text=task.get("result_summary") or None)
     if task:
         board_relay.notify_task_update(
             task_id, task["title"], task["status"], task.get("domain"), body.note,
@@ -107,32 +115,51 @@ def request_approval(task_id: str, body: ApprovalRequestBody) -> dict:
         task_id, task["title"], "awaiting_approval", task.get("domain"), body.action,
     )
     employee_comms.notify_question(task, body.action, body.payload)
+    if body.action == "question" and task.get("schedule_id"):
+        run = task_store.get_run_for_task(task_id)
+        if run and run["status"] == "running":
+            payload = body.payload or {}
+            task_store.set_run_question(
+                run["id"],
+                payload.get("question") or body.action,
+                importance=payload.get("importance") or "important",
+            )
     return {"approval_id": aid, "status": "awaiting_approval"}
 
 
-@router.post("/{task_id}/answer")
-def answer_question(task_id: str, body: AnswerBody) -> dict:
+def apply_answer(task_id: str, answer: str, actor: str = "user") -> dict:
     """Answer a pending action='question' approval: bake the answer into the
-    instruction and requeue explicitly (ready for units, new for parents)."""
+    instruction and requeue explicitly (ready for units, new for parents).
+    Shared by the /answer route (actor='user') and the chief agent."""
     task = task_store.get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="task not found")
     pend = [a for a in task_store.list_pending_approvals() if a["task_id"] == task_id]
     if not pend:
         raise HTTPException(status_code=404, detail="no pending question")
-    task_store.decide_approval(pend[-1]["id"], approved=True, answer_text=body.answer)
+    task_store.decide_approval(pend[-1]["id"], approved=True, answer_text=answer)
     instruction = (task.get("instruction") or task["title"]).rstrip()
     new_status = "ready" if task.get("kind") == "worker_unit" else "new"
+    header = "## User answer" if actor == "user" else "## Chief answer"
     task_store.update_task(
         task_id,
-        instruction=f"{instruction}\n\n## User answer\n{body.answer}",
+        instruction=f"{instruction}\n\n{header}\n{answer}",
         status=new_status,
     )
-    task_store.add_log(task_id, actor="user", message=f"answered: {body.answer[:200]}")
+    task_store.add_log(task_id, actor=actor, message=f"answered: {answer[:200]}")
+    if task.get("schedule_id"):
+        run = task_store.get_run_for_task(task_id)
+        if run and run["status"] == "waiting_user":
+            task_store.set_run_answered(run["id"], actor, answer)
     board_relay.notify_task_update(
         task_id, task["title"], new_status, task.get("domain"), "question answered",
     )
     return {"status": new_status}
+
+
+@router.post("/{task_id}/answer")
+def answer_question(task_id: str, body: AnswerBody) -> dict:
+    return apply_answer(task_id, body.answer, actor="user")
 
 
 @router.post("/{task_id}/approve")
