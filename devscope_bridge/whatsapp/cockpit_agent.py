@@ -11,6 +11,7 @@ from devscope_bridge import session_manager, session_store
 from devscope_bridge import session_manager_cursor as cursor_mod
 from devscope_bridge.models import AiChunk, AiDone, AiError
 from devscope_bridge.mode_presets import MODE_PRESETS
+from devscope_bridge import session_lifecycle
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ async def _run_claude(system_prompt: str, user_text: str, timeout_s: float) -> s
             stderr=asyncio.subprocess.PIPE,
             cwd=session_store.DEFAULT_CWD,
             env=session_manager.subscription_env(),
+            limit=session_lifecycle.STREAM_LINE_LIMIT,
         )
         assert proc.stdin is not None
         proc.stdin.write(_encode_user_message(user_text))

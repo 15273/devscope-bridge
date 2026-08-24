@@ -12,6 +12,7 @@ import logging
 from typing import Any
 
 from devscope_bridge import session_manager, session_store
+from devscope_bridge import session_lifecycle
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ async def _spawn_proc() -> asyncio.subprocess.Process:
         stderr=asyncio.subprocess.PIPE,
         cwd=session_store.DEFAULT_CWD,
         env=session_manager.subscription_env(),
+        limit=session_lifecycle.STREAM_LINE_LIMIT,
     )
 
 
