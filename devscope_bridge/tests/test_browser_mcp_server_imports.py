@@ -14,7 +14,7 @@ def test_module_imports():
 
 def test_tool_count_matches_spec():
     """Tool count must match TOOL_NAMES registry."""
-    assert len(TOOL_NAMES) == 28
+    assert len(TOOL_NAMES) == 30
 
 
 def test_expected_tool_names():
@@ -52,6 +52,8 @@ def test_expected_tool_names():
         "linkedin_scrape_people_search",
         "linkedin_read_search_state",
         "linkedin_scrape_profile",
+        "linkedin_scrape_notifications",
+        "linkedin_react",
     }
     assert set(TOOL_NAMES) == expected
 

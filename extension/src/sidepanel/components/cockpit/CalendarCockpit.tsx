@@ -177,7 +177,7 @@ export function CalendarCockpit() {
             <button
               type="button"
               onClick={() => void loadFreeSlots()}
-              disabled={needsAuth}
+              disabled={Boolean(needsAuth)}
               className="rounded-md bg-surface-overlay px-2 py-1 text-2xs font-medium text-fg transition-colors hover:bg-signal-subtle hover:text-signal disabled:opacity-50"
             >
               חפש

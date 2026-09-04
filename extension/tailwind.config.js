@@ -54,6 +54,8 @@ export default {
         // Agent identity (static brand colors — use /10 alpha for tints)
         claude: '#CC785C',
         cursor: '#7C6AF5',
+        codex: '#10A37F',
+        antigravity: '#4285F4',
       },
       fontFamily: {
         sans: [

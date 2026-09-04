@@ -37,7 +37,6 @@ const ATTENTION_BADGE_TEXT = '!';
 const ATTENTION_BADGE_COLOR = '#d97706';
 
 let offscreenReadyAt = 0;
-let panelHostWindowId: number | null = null;
 let connectedPanelPorts = 0;
 
 function log(...args: unknown[]): void {
@@ -114,7 +113,6 @@ async function ensureOffscreenAndCredentials(pushedToken?: string): Promise<void
 
 chrome.action.onClicked.addListener((tab) => {
   if (tab.windowId === undefined) return;
-  panelHostWindowId = tab.windowId;
   chrome.storage.session
     .set({ [PANEL_HOST_WINDOW_KEY]: tab.windowId })
     .catch(() => {});
@@ -137,8 +135,7 @@ chrome.runtime.onStartup.addListener(() => {
 void chrome.storage.session
   .get(PANEL_HOST_WINDOW_KEY)
   .then((stored) => {
-    const id = stored[PANEL_HOST_WINDOW_KEY] as number | undefined;
-    if (id != null) panelHostWindowId = id;
+    void stored[PANEL_HOST_WINDOW_KEY];
   })
   .catch(() => {});
 void ensureOffscreenAndCredentials().catch((err) => log('initial bridge bootstrap failed:', err));
@@ -280,7 +277,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.kind === 'register_panel_host') {
     const windowId = (msg as { windowId?: number }).windowId;
     if (windowId != null) {
-      panelHostWindowId = windowId;
       chrome.storage.session
         .set({ [PANEL_HOST_WINDOW_KEY]: windowId })
         .catch(() => {});
@@ -510,5 +506,5 @@ chrome.notifications.onClicked.addListener((notificationId) => {
     if (win.id === undefined) return;
     chrome.sidePanel.open({ windowId: win.id }).catch(() => {});
   });
-  chrome.notifications.clear(notificationId).catch(() => {});
+  void chrome.notifications.clear(notificationId);
 });

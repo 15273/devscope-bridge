@@ -8,8 +8,11 @@ version = "0.1.0"
 description = "Local loopback bridge between the DevScope Chrome extension and the Claude / Cursor CLI"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
 keywords = ["devscope", "chrome-extension", "claude", "bridge"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+]
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
@@ -28,6 +31,7 @@ devscope-bridge = "devscope_bridge.main:run"
 
 [project.urls]
 Homepage = "https://github.com/15273/devscope-bridge"
+License = "https://github.com/15273/devscope-bridge/blob/main/LICENSE"
 
 [tool.setuptools.packages.find]
 where = ["."]

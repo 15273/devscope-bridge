@@ -158,3 +158,30 @@ async def test_auto_compact_proceeds_when_idle(chat_env, monkeypatch):
     apply_reset.assert_awaited_once_with("my-chat", "summary", True)
     assert "my-chat" in chat_session_hygiene._last_auto_compact_at
     assert not q.empty(), "successful auto-compact emits progress cards"
+
+
+@pytest.mark.asyncio
+async def test_auto_compact_aborts_reset_if_work_starts_during_summarize(chat_env, monkeypatch):
+    from devscope_bridge import compact_service
+    session_store.upsert_session("my-chat", "sid-1", agent="claude", cwd="/tmp")
+    mid = {"running": False}
+    _patch_mid_work(monkeypatch, turn_running=False, sub_agents=False)
+    monkeypatch.setattr(
+        chat_session_hygiene,
+        "_is_mid_work",
+        lambda _n: mid["running"],
+    )
+
+    async def _guarded(_name, _extra, _q):
+        mid["running"] = True
+        return MagicMock(ok=True, preamble="summary", was_real_summary=True, skipped=None)
+
+    apply_reset = AsyncMock()
+    monkeypatch.setattr(compact_service, "guarded_compact", _guarded)
+    monkeypatch.setattr(compact_service, "apply_compact_reset", apply_reset)
+
+    q = asyncio.Queue()
+    await chat_session_hygiene._run_auto_compact("my-chat", "test reason", q)
+
+    apply_reset.assert_not_awaited()
+    assert "my-chat" not in chat_session_hygiene._last_auto_compact_at

@@ -17,6 +17,8 @@ from devscope_bridge.background_cursor_task import _mcp_list_status
 from devscope_bridge.capabilities import _browser_status, _token_ready
 from devscope_bridge.capabilities import _CALENDAR_TOKEN, _GMAIL_TOKEN
 from devscope_bridge.session_manager_cursor import _resolve_cursor_bin
+from devscope_bridge.session_manager_codex import resolve_codex_bin
+from devscope_bridge.session_manager_agy import resolve_agy_bin
 
 _MCP_STATUS_TTL_S = 60.0
 _mcp_status_cache: tuple[float, dict[str, str]] | None = None
@@ -86,6 +88,18 @@ CAPABILITIES: dict[str, Capability] = {
         requires=(), consumer_visible=False,
         description="Quick parallel question answered by a separate claude --print turn.",
     ),
+    "codex_cli": Capability(
+        id="codex_cli", label="OpenAI Codex", backends=("codex_exec",),
+        requires=("codex_bin",),
+        description="Local Codex CLI chats (codex exec / app-server). MCP is not auto-injected — add servers in ~/.codex/config.toml.",
+        setup_hint="brew install --cask codex  or  curl -fsSL https://chatgpt.com/codex/install.sh | sh",
+    ),
+    "antigravity_cli": Capability(
+        id="antigravity_cli", label="Antigravity CLI", backends=("agy",),
+        requires=("agy_bin",),
+        description="Local agy chats. Antigravity IDE conversations can be indexed read-only.",
+        setup_hint="curl -fsSL https://antigravity.google/cli/install.sh | bash",
+    ),
 }
 
 
@@ -117,6 +131,10 @@ async def _probe(requirement: str) -> bool:
         return bool(_token_ready(_CALENDAR_TOKEN, "")["ready"])
     if requirement == "cursor_agent_bin":
         return bool(_resolve_cursor_bin())
+    if requirement == "codex_bin":
+        return bool(resolve_codex_bin())
+    if requirement == "agy_bin":
+        return bool(resolve_agy_bin())
     if requirement.startswith("cursor_plugin:"):
         plugin = requirement.split(":", 1)[1]
         return _plugin_ready(await cursor_mcp_status(), plugin)

@@ -195,6 +195,21 @@ def get_stderr_tail(name: str) -> str:
     return "\n".join(buf)[-_STDERR_TAIL_MAX_CHARS:]
 
 
+def cleanup_runtime_state(name: str) -> None:
+    """Forget process-scoped state when a Claude subprocess is terminated.
+
+    Session usage and the last completed turn id intentionally survive a
+    respawn; partial output, current tools and stderr diagnostics do not.
+    """
+    _assistant_text_accum.pop(name, None)
+    _current_block_index.pop(name, None)
+    _text_block_counters.pop(name, None)
+    _current_tool.pop(name, None)
+    _last_output_at.pop(name, None)
+    _stderr_tails.pop(name, None)
+    _recent_events.pop(name, None)
+
+
 def touch_output(name: str) -> None:
     """Record that session `name` just produced real stdout (contract-2 last_output_at)."""
     _last_output_at[name] = time.time()
@@ -840,8 +855,12 @@ async def dispatch_event(
         from devscope_bridge import chat_session_hygiene
         asyncio.create_task(chat_session_hygiene.evaluate_after_turn(name, q, input_tokens))
 
-        # Clear per-turn tracking state.
-        sub_agent_tracker.clear_session(name)
+        # Keep Task/Agent in-flight across a successful parent result — the
+        # CLI can end the parent turn while background agents still run.
+        # Clearing here made auto-compact think the session was idle and kill
+        # the process (and every live sub-agent). Only wipe on error turns.
+        if is_error_turn:
+            sub_agent_tracker.clear_session(name)
         _lfh.clear_pending_tool_calls(name)
         set_current_tool(name, None)
         _current_block_index.pop(name, None)

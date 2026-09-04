@@ -44,8 +44,8 @@ class BridgeSessionRunner:
         ``cwd`` pins a fresh session to a project directory (per-task
         project_path); existing sessions keep their stored cwd.
         """
-        if agent not in ("claude", "cursor"):
-            agent = "claude"
+        from devscope_bridge.agents import parse_agent
+        agent = parse_agent(agent)
         if session_store.get_session(name) is None:
             session_store.create_session_metadata(
                 name=name,

@@ -12,7 +12,7 @@
  *  Cmd/Ctrl+1..9 → switch to session by sidebar order
  *  Esc → close modal (handled inside modal)
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type Ref } from 'react';
 import { Camera, MessageSquareCode, MousePointerClick, RotateCw } from 'lucide-react';
 import { SessionSidebar } from './components/SessionSidebar';
 import { Chat } from './components/Chat';
@@ -20,6 +20,7 @@ import { Composer } from './components/Composer';
 import { Settings } from './components/Settings';
 import { Glossary } from './components/Glossary';
 import { NewSessionModal } from './components/NewSessionModal';
+import { ImportClaudeSessionsModal } from './components/ImportClaudeSessionsModal';
 import { NewTaskModal } from './components/NewTaskModal';
 import { Onboarding } from './components/Onboarding';
 import { ActivityStrip } from './components/ActivityStrip';
@@ -27,7 +28,7 @@ import { StreamDebugPanel } from './components/StreamDebugPanel';
 import { BrowserContextStrip } from './components/BrowserContextStrip';
 import { CapabilitiesStrip } from './components/CapabilitiesStrip';
 import { Logomark } from './components/Logomark';
-import { TerminalView } from './components/TerminalView';
+import { TerminalView, type TerminalViewHandle } from './components/TerminalView';
 import { TerminalSessionView } from './components/TerminalSessionView';
 import { useSessionManager } from './hooks/useSessionManager';
 import { useBridgeHealth } from './hooks/useBridgeHealth';
@@ -76,6 +77,7 @@ export function App() {
     retryMessage,
     cancelSteering,
     createSession,
+    importClaudeSession,
     deleteSession,
     interrupt,
     resetSession,
@@ -99,6 +101,7 @@ export function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showGlossary, setShowGlossary] = useState(false);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
   const [taskDomainFilter, setTaskDomainFilter] = useState<string | null>(null);
   const [openTerminal, setOpenTerminal] = useState<OpenTerminal | null>(null);
@@ -330,6 +333,7 @@ export function App() {
       activeSession={state.activeSession}
       onSelect={switchSession}
       onNewChat={handleNewChat}
+      onImportClaude={() => setShowImportModal(true)}
       onNewTask={handleNewTask}
       onDelete={deleteSession}
       onOpenTerminal={handleOpenTerminal}
@@ -358,6 +362,14 @@ export function App() {
     <NewTaskModal onClose={handleCloseTaskModal} />
   );
 
+  const importClaudeModal = showImportModal && (
+    <ImportClaudeSessionsModal
+      onImport={importClaudeSession}
+      onOpenExisting={switchSession}
+      onClose={() => setShowImportModal(false)}
+    />
+  );
+
   if (showSettings) {
     return (
       <div className="flex h-screen overflow-hidden">
@@ -366,6 +378,7 @@ export function App() {
           <Settings onClose={() => setShowSettings(false)} />
         </div>
         {newSessionModal}
+        {importClaudeModal}
         {newTaskModal}
       </div>
     );
@@ -379,6 +392,7 @@ export function App() {
           <Glossary onClose={() => setShowGlossary(false)} />
         </div>
         {newSessionModal}
+        {importClaudeModal}
         {newTaskModal}
       </div>
     );
@@ -452,7 +466,7 @@ export function App() {
               {streamPtyActive && openTerminal && (
                 <TerminalView
                   key={openTerminal.terminalId}
-                  ref={ptyBinding?.terminalRef}
+                  ref={ptyBinding?.terminalRef as Ref<TerminalViewHandle> | undefined}
                   terminalId={openTerminal.terminalId}
                   cmd="resume"
                   session={openTerminal.session}
@@ -595,6 +609,7 @@ export function App() {
       </div>
 
       {newSessionModal}
+      {importClaudeModal}
       {newTaskModal}
     </div>
   );

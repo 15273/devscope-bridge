@@ -10,10 +10,11 @@ DOMAINS = ("browser", "research", "dev")
 
 LINKEDIN_WORKER_NOTES = (
     "LINKEDIN (browser domain): For linkedin.com tasks use DevScope content scripts via "
-    "linkedin_scrape_feed, linkedin_fill_composer, linkedin_fill_comment, "
+    "linkedin_scrape_feed, linkedin_scrape_notifications, linkedin_react, "
+    "linkedin_fill_composer, linkedin_fill_comment, "
     "linkedin_scrape_people_search, linkedin_read_search_state, linkedin_scrape_profile. "
-    "Feed scan and people search may run autonomously (read-only). Post/Comment/Send "
-    "ALWAYS require user confirmation unless playbook.allow_auto_post is explicitly true."
+    "Feed/notification scans may run autonomously. Like/Comment/Send require approval "
+    "unless playbook.watch.allow_auto_engage or playbook.allow_auto_post is explicitly true."
 )
 
 # Sensitive action classes a Worker must route through task_request_approval

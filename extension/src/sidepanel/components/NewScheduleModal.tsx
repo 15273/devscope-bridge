@@ -2,9 +2,15 @@
  * NewScheduleModal — wizard with Claude/Cursor engine + dedicated setup chat.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronLeft, ChevronRight, Loader2, Map, MessageSquare, RefreshCw, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, Loader2, Map, MessageSquare, RefreshCw, X } from 'lucide-react';
 import type { Agent, AgentMode } from '@/shared/frames';
+import { AGENTS, AGENT_LABELS } from '@/shared/agents';
 import { createSchedule, type SchedulePlaybook } from '../bridge';
+import {
+  LINKEDIN_WATCH_INSTRUCTION,
+  LINKEDIN_WATCH_TITLE,
+  linkedinWatchPlaybook,
+} from '../linkedinWatchPreset';
 import { discoverSchedulePlaybook } from '../integrations/scheduleDiscover';
 import {
   bootstrapScheduleSetup,
@@ -18,6 +24,12 @@ import {
 const DOMAINS = ['browser', 'research', 'dev'] as const;
 const STEPS = ['מטרה', 'מיפוי', 'סיום'] as const;
 type Step = (typeof STEPS)[number];
+type Recurrence = 'daily' | 'hourly' | 'every_30';
+const FEED_URL = 'https://www.linkedin.com/feed/';
+
+function parseKeywords(raw: string): string[] {
+  return raw.split(/[,|\n]/).map((s) => s.trim()).filter(Boolean);
+}
 
 interface NewScheduleModalProps {
   sessionName: string | null;
@@ -26,10 +38,14 @@ interface NewScheduleModalProps {
   onCreated: () => void;
 }
 
-function computeNextRun(recurrence: 'daily' | 'hourly', dailyAt: string): string {
+function computeNextRun(recurrence: Recurrence, dailyAt: string): string {
   const now = new Date();
   if (recurrence === 'hourly') {
     now.setHours(now.getHours() + 1, 0, 0, 0);
+    return formatTs(now);
+  }
+  if (recurrence === 'every_30') {
+    now.setMinutes(now.getMinutes() + 30);
     return formatTs(now);
   }
   const [hh, mm] = dailyAt.split(':').map(Number);
@@ -74,9 +90,14 @@ export function NewScheduleModal({
   const [agent, setAgent] = useState<Agent>('claude');
   const [setupMode, setSetupMode] = useState<AgentMode>('inspect');
   const [runtimeMode, setRuntimeMode] = useState<AgentMode>('act');
-  const [recurrence, setRecurrence] = useState<'daily' | 'hourly'>('daily');
+  const [recurrence, setRecurrence] = useState<Recurrence>('daily');
   const [dailyAt, setDailyAt] = useState('09:00');
   const [e2e, setE2e] = useState(true);
+  const [watchPreset, setWatchPreset] = useState(false);
+  const [likeKeywords, setLikeKeywords] = useState('');
+  const [commentKeywords, setCommentKeywords] = useState('');
+  const [commentStyle, setCommentStyle] = useState('קצר, מקצועי, בעברית או באנגלית לפי הפוסט');
+  const [likeNew, setLikeNew] = useState(false);
   const [playbook, setPlaybook] = useState<SchedulePlaybook>(emptyPlaybook());
   const [draftId, setDraftId] = useState<string | null>(null);
   const [setupSessionName, setSetupSessionName] = useState<string | null>(null);
@@ -128,6 +149,53 @@ export function NewScheduleModal({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  const applyLinkedInWatch = useCallback(() => {
+    const pb = linkedinWatchPlaybook({
+      likeKeywords: parseKeywords(likeKeywords),
+      commentKeywords: parseKeywords(commentKeywords),
+      commentStyle: commentStyle.trim(),
+      likeNew,
+    });
+    setTitle(LINKEDIN_WATCH_TITLE);
+    setInstruction(LINKEDIN_WATCH_INSTRUCTION);
+    setDomain('browser');
+    setEntryUrl(FEED_URL);
+    setRuntimeMode('act');
+    setE2e(true);
+    setRecurrence('every_30');
+    setPlaybook(pb);
+    setWatchPreset(true);
+    setMapped(true);
+    setDiscoverError('');
+    setError('');
+  }, [likeKeywords, commentKeywords, commentStyle, likeNew]);
+
+  const syncWatchPlaybook = useCallback(
+    (next: {
+      likeKeywords?: string;
+      commentKeywords?: string;
+      commentStyle?: string;
+      likeNew?: boolean;
+    }) => {
+      const likes = next.likeKeywords ?? likeKeywords;
+      const comments = next.commentKeywords ?? commentKeywords;
+      const style = next.commentStyle ?? commentStyle;
+      const likeAll = next.likeNew ?? likeNew;
+      const nextPb = linkedinWatchPlaybook({
+        likeKeywords: parseKeywords(likes),
+        commentKeywords: parseKeywords(comments),
+        commentStyle: style.trim(),
+        likeNew: likeAll,
+      });
+      setPlaybook((prev) => ({
+        ...prev,
+        ...nextPb,
+        watch: { ...prev.watch, ...nextPb.watch },
+      }));
+    },
+    [likeKeywords, commentKeywords, commentStyle, likeNew],
+  );
 
   const runDiscover = useCallback(async () => {
     if (!entryUrl.trim()) {
@@ -216,9 +284,14 @@ export function NewScheduleModal({
       selectors: playbook.selectors ?? {},
       notes: playbook.notes?.trim() || undefined,
       checklist: playbook.checklist ?? [],
+      watch: playbook.watch,
     };
     const recurrenceSpec =
-      recurrence === 'hourly' ? { every_minutes: 60 } : { daily_at: dailyAt };
+      recurrence === 'hourly'
+        ? { every_minutes: 60 }
+        : recurrence === 'every_30'
+          ? { every_minutes: 30 }
+          : { daily_at: dailyAt };
     setBusy(true);
     setError('');
     const created = await createSchedule({
@@ -280,6 +353,19 @@ export function NewScheduleModal({
           {step === 'מטרה' && (
             <>
               <EnginePicker agent={agent} onChange={setAgent} />
+              <button
+                type="button"
+                onClick={applyLinkedInWatch}
+                className={[
+                  'flex w-full items-center justify-center gap-2 rounded-md border py-2 text-xs font-medium',
+                  watchPreset
+                    ? 'border-signal bg-signal-subtle text-signal'
+                    : 'border-line hover:bg-surface-raised',
+                ].join(' ')}
+              >
+                <Eye size={14} />
+                צופה LinkedIn — פיד + התראות, לייק/תגובה לפי כללים
+              </button>
               <Field label="כותרת">
                 <input ref={titleRef} value={title} onChange={(e) => setTitle(e.target.value)}
                   className="field-input" placeholder="למשל: פוסט לינקדאין שבועי" />
@@ -301,10 +387,65 @@ export function NewScheduleModal({
                     placeholder="https://…" dir="ltr" />
                 </Field>
               </div>
+              {watchPreset && (
+                <div className="space-y-2 rounded-md border border-signal/30 bg-signal-subtle/40 p-3">
+                  <p className="text-2xs font-medium text-fg">כללי מעורבות אוטומטית</p>
+                  <Field label="מילות מפתח ללייק (מופרדות בפסיק)">
+                    <input
+                      value={likeKeywords}
+                      onChange={(e) => {
+                        setLikeKeywords(e.target.value);
+                        syncWatchPlaybook({ likeKeywords: e.target.value });
+                      }}
+                      className="field-input"
+                      placeholder="hiring, product, AI"
+                      dir="ltr"
+                    />
+                  </Field>
+                  <Field label="מילות מפתח לתגובה">
+                    <input
+                      value={commentKeywords}
+                      onChange={(e) => {
+                        setCommentKeywords(e.target.value);
+                        syncWatchPlaybook({ commentKeywords: e.target.value });
+                      }}
+                      className="field-input"
+                      placeholder="open to work, launch"
+                      dir="ltr"
+                    />
+                  </Field>
+                  <Field label="סגנון תגובה">
+                    <input
+                      value={commentStyle}
+                      onChange={(e) => {
+                        setCommentStyle(e.target.value);
+                        syncWatchPlaybook({ commentStyle: e.target.value });
+                      }}
+                      className="field-input"
+                      placeholder="קצר, מקצועי"
+                    />
+                  </Field>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={likeNew}
+                      onChange={(e) => {
+                        setLikeNew(e.target.checked);
+                        syncWatchPlaybook({ likeNew: e.target.checked });
+                      }}
+                      className="accent-signal"
+                    />
+                    <span>לייק לכל פוסט חדש (לא רק לפי מילות מפתח)</span>
+                  </label>
+                  <p className="text-2xs text-fg-muted">
+                    ה-playbook כבר מוכן — אפשר לדלג על מיפוי. צריך Chrome מחובר ו-LinkedIn מחובר.
+                  </p>
+                </div>
+              )}
               <p className="text-2xs text-fg-subtle">
-                מנוע הריצה: <strong>{agent === 'cursor' ? 'Cursor' : 'Claude'}</strong>
+                מנוע הריצה: <strong>{AGENT_LABELS[agent]}</strong>
                 {sessionName ? (
-                  <> · טאb דפדפן דרך session <span className="font-mono">{sessionName}</span></>
+                  <> · טאב דפדפן דרך session <span className="font-mono">{sessionName}</span></>
                 ) : (
                   <> · <span className="text-danger">בחר session פעיל לדפדפן</span></>
                 )}
@@ -317,7 +458,7 @@ export function NewScheduleModal({
               <div className="rounded-md border border-signal/30 bg-signal-subtle/40 p-3 space-y-2">
                 <p className="text-2xs font-medium text-fg">מומלץ: צ'אט הגדרה ייעודי</p>
                 <p className="text-2xs leading-relaxed text-fg-muted">
-                  סשן נפרד ({agent === 'cursor' ? 'Cursor' : 'Claude'}) למחקר מעמיק — שאלות, בדיקות,
+                  סשן נפרד ({AGENT_LABELS[agent]}) למחקר מעמיק — שאלות, בדיקות,
                   עדכון playbook עד שמוכן.
                 </p>
                 <Field label="מצב הגדרה">
@@ -395,10 +536,11 @@ export function NewScheduleModal({
               </Field>
               <div className="grid grid-cols-2 gap-2">
                 <Field label="תדירות">
-                  <select value={recurrence} onChange={(e) => setRecurrence(e.target.value as 'daily' | 'hourly')}
+                  <select value={recurrence} onChange={(e) => setRecurrence(e.target.value as Recurrence)}
                     className="field-input">
                     <option value="daily">יומי</option>
                     <option value="hourly">כל שעה</option>
+                    <option value="every_30">כל 30 דקות</option>
                   </select>
                 </Field>
                 {recurrence === 'daily' && (
@@ -413,7 +555,7 @@ export function NewScheduleModal({
                 <span>E2E — שליחה/פרסום בלי אישור</span>
               </label>
               <p className="text-2xs text-fg-muted">
-                מנוע: {agent === 'cursor' ? 'Cursor' : 'Claude'} · ריצה: {runtimeMode}
+                מנוע: {AGENT_LABELS[agent]} · ריצה: {runtimeMode}
               </p>
               <PlaybookPreview playbook={playbook} onChange={setPlaybook} editable />
               {error && <p className="rounded bg-danger-subtle px-2 py-1 text-danger">{error}</p>}
@@ -434,10 +576,12 @@ export function NewScheduleModal({
               </button>
             )}
             {step !== 'סיום' ? (
-              <button type="button" onClick={() => setStep(STEPS[stepIdx + 1])}
+              <button
+                type="button"
+                onClick={() => setStep(watchPreset && step === 'מטרה' ? 'סיום' : STEPS[stepIdx + 1])}
                 disabled={step === 'מטרה' && !title.trim()}
                 className="flex items-center gap-1 rounded-md bg-signal px-3 py-1.5 font-medium text-signal-contrast disabled:opacity-40">
-                הבא
+                {watchPreset && step === 'מטרה' ? 'המשך לסיום' : 'הבא'}
                 <ChevronLeft size={14} />
               </button>
             ) : (
@@ -458,8 +602,8 @@ function EnginePicker({ agent, onChange }: { agent: Agent; onChange: (a: Agent) 
   return (
     <div className="flex items-center gap-2">
       <span className="text-2xs font-medium text-fg-muted">מנוע</span>
-      <div className="flex flex-1 gap-0.5 rounded-md border border-line bg-surface p-0.5">
-        {(['claude', 'cursor'] as Agent[]).map((a) => (
+      <div className="grid flex-1 grid-cols-2 gap-0.5 rounded-md border border-line bg-surface p-0.5">
+        {AGENTS.map((a) => (
           <button
             key={a}
             type="button"
@@ -469,7 +613,7 @@ function EnginePicker({ agent, onChange }: { agent: Agent; onChange: (a: Agent) 
               agent === a ? 'bg-signal text-signal-contrast' : 'text-fg-muted hover:text-fg',
             ].join(' ')}
           >
-            {a === 'cursor' ? 'Cursor' : 'Claude'}
+            {AGENT_LABELS[a]}
           </button>
         ))}
       </div>
@@ -510,6 +654,18 @@ function PlaybookPreview({
     <div className="space-y-2 rounded-md border border-line bg-surface-raised p-2">
       <p className="text-2xs font-medium text-fg-muted">Playbook</p>
       {playbook.site && <p className="text-2xs text-fg">אתר: {playbook.site}</p>}
+      {playbook.watch && (
+        <p className="text-2xs text-fg-muted">
+          Watch: {playbook.watch.allow_auto_engage ? 'auto-engage' : 'read-only'}
+          {playbook.watch.like_new ? ' · like-new' : ''}
+          {(playbook.watch.like_keywords?.length ?? 0) > 0
+            ? ` · like: ${playbook.watch.like_keywords?.join(', ')}`
+            : ''}
+          {(playbook.watch.comment_keywords?.length ?? 0) > 0
+            ? ` · comment: ${playbook.watch.comment_keywords?.join(', ')}`
+            : ''}
+        </p>
+      )}
       {editable ? (
         <>
           <Field label="שלבים">

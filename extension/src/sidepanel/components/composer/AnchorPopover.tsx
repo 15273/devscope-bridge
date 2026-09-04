@@ -3,7 +3,7 @@
  * overflow-hidden ancestors (Chat column above the composer).
  */
 import { createPortal } from 'react-dom';
-import { useLayoutEffect, useState, type ReactNode, type RefObject } from 'react';
+import { useLayoutEffect, useState, type ReactNode, type Ref, type RefObject } from 'react';
 
 interface AnchorPopoverProps {
   anchorRef: RefObject<HTMLElement | null>;
@@ -63,7 +63,7 @@ export function AnchorPopover({
 
   return createPortal(
     <div
-      ref={popoverRef}
+      ref={popoverRef as Ref<HTMLDivElement> | undefined}
       className={className}
       style={{
         position: 'fixed',

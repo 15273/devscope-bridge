@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import signal
+import time
 from collections.abc import Callable
 from datetime import datetime
 
@@ -44,17 +45,32 @@ async def _force_turn_idle(active: _ActiveSession, *, reason: str) -> None:
 
 
 def _turn_silence_age_s(active: "_ActiveSession", now: datetime) -> float:
-    """Seconds since real turn progress — last_output_at when known (A5/RC-9).
+    """Seconds since real turn progress — the later of last stdout and turn start.
 
-    Falls back to last_msg_at (time the message was dispatched) only when no
-    stdout has arrived yet at all — e.g. the process just spawned and hasn't
-    printed its first event. Using the dispatch time as "silence" here was the
-    bug: a session that had been happily streaming for an hour still measured
-    "silence" from the last message, not the last time it actually did anything.
+    Measuring from last_output_at alone (A5/RC-9) fixed one bug and introduced
+    another: _last_output_at is written only when stdout arrives and is never
+    reset, so a turn dispatched one second ago inherited the entire gap since
+    the *previous* turn's last output. A session whose agent died silently
+    yesterday came back measuring 17 hours of "silence" on a brand-new turn,
+    blew past the absolute cap, and was killed on the next sweep before it
+    could emit its first token — which widened the gap, so every retry failed
+    harder than the last.
+
+    Clamping to turn_started_at keeps the A5/RC-9 intent (a session that has
+    been streaming for an hour measures silence from its last event, not from
+    the message that started it) while making a fresh turn start from zero.
+
+    Falls back to last_msg_at only when neither clock is set.
     """
-    last_output_at = session_reader.get_last_output_at(active.name)
-    if last_output_at is not None:
-        return max(0.0, time.time() - last_output_at)
+    turn_started_at = (
+        active.turn_started_at.timestamp() if active.turn_started_at else None
+    )
+    clocks = [
+        c for c in (session_reader.get_last_output_at(active.name), turn_started_at)
+        if c is not None
+    ]
+    if clocks:
+        return max(0.0, time.time() - max(clocks))
     return (now - active.last_msg_at).total_seconds()
 
 
@@ -275,13 +291,22 @@ async def _terminate_process_only(
             active.proc.kill()
         except ProcessLookupError:
             pass
+    # Cancellation normally lets the reader's finally block do this cleanup,
+    # but do it explicitly as well: a mocked/already-finished reader must not
+    # leak liveness, partial transcript, or stderr state into the replacement.
+    session_reader.cleanup_runtime_state(active.name)
 
 
-async def _terminate_session(name: str, *, reason: str = "session terminated") -> None:
+async def _terminate_session(
+    name: str,
+    *,
+    reason: str = "session terminated",
+    notify_ui: bool = True,
+) -> None:
     active = _sessions.pop(name, None)
     if not active:
         return
-    await _terminate_process_only(active, reason=reason)
+    await _terminate_process_only(active, reason=reason, notify_ui=notify_ui)
     active.idle_task.cancel()
     logger.info("Session '%s' terminated", name)
 
@@ -446,4 +471,3 @@ async def _respawn_process(
         )
     )
     logger.info("Session '%s' respawned (pid %d)", active.name, new_proc.pid)
-

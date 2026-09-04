@@ -17,7 +17,7 @@ export async function discoverSchedulePlaybook(payload: {
   goal: string;
   session?: string | null;
   domain?: string;
-  agent?: 'claude' | 'cursor';
+  agent?: import('@/shared/frames').Agent;
 }): Promise<ScheduleDiscoverResult> {
   try {
     const token = await getToken();

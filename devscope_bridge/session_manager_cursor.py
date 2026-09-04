@@ -37,7 +37,6 @@ import shutil
 import signal
 import subprocess
 import threading
-import uuid
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
@@ -228,7 +227,13 @@ def _looks_like_uuid(s: str) -> bool:
 
 
 def _session_id_from_obj(obj: dict) -> str | None:
-    sid = obj.get("session_id") or obj.get("id")
+    # `id` is also used for tool calls/messages.  Treating every UUID-shaped
+    # event id as a chat id silently poisoned the next `--resume`.  Cursor's
+    # chat id is carried as `session_id`, or as `id` on the dedicated session
+    # event only.
+    sid = obj.get("session_id")
+    if not sid and obj.get("type") == "session":
+        sid = obj.get("id")
     if sid and _looks_like_uuid(str(sid)):
         return str(sid)
     return None
@@ -244,11 +249,11 @@ def _extract_session_id_from_lines(lines: list[str]) -> str | None:
             sid = _session_id_from_obj(obj)
             if sid:
                 return sid
+            continue
         except (json.JSONDecodeError, AttributeError):
             pass
         if _looks_like_uuid(stripped):
             return stripped
-        break
     return None
 
 
@@ -361,7 +366,9 @@ def _delta_from_cumulative(cumulative: str, accum: str) -> tuple[str, str]:
         return cumulative[len(accum):], cumulative
     if accum and accum.startswith(cumulative):
         return "", accum
-    return cumulative, cumulative
+    # A non-prefix assistant event is additional output, not a replacement:
+    # the UI is append-only and the persisted transcript must match it.
+    return cumulative, accum + cumulative
 
 
 def _cursor_activities_from_obj(obj: dict) -> list[tuple[str, str, str | None, str | None]]:
@@ -424,11 +431,13 @@ def _parse_line_to_delta(line: str, accum: str) -> tuple[str | None, str, str | 
 
         if ev_type == "text_delta":
             t = obj.get("text")
-            return (str(t) if t else None), accum, session_id
+            text = str(t) if t else ""
+            return (text or None), accum + text, session_id
 
         if ev_type in ("content", "partial"):
             t = obj.get("text") or obj.get("content")
-            return (str(t) if t else None), accum, session_id
+            text = str(t) if t else ""
+            return (text or None), accum + text, session_id
 
         if ev_type == "result":
             return _delta_from_result(obj.get("result") or obj.get("output") or obj.get("text"), accum, session_id)
@@ -605,7 +614,20 @@ def _run_cursor_streaming_blocking(
     emitted_any = False
 
     def _put(frame) -> None:
-        asyncio.run_coroutine_threadsafe(q.put(frame), loop)
+        # The worker thread can outlive the request loop during shutdown.
+        # Schedule a synchronous put so no coroutine can be leaked if the loop
+        # closes between the liveness check and the thread-safe handoff.
+        if loop.is_closed():
+            return
+        def enqueue() -> None:
+            try:
+                q.put_nowait(frame)
+            except (asyncio.QueueFull, RuntimeError):
+                pass
+        try:
+            loop.call_soon_threadsafe(enqueue)
+        except RuntimeError:
+            return
 
     for line in _iter_stdout_lines(proc):
         cursor_watchdog.touch_stdout(session_name)
@@ -647,17 +669,17 @@ def _run_cursor_streaming_blocking(
         return
 
     if not session_ready_sent:
-        new_sid = (
-            _extract_session_id_from_lines(stdout_lines)
-            or prior_session_id
-            or str(uuid.uuid4())
-        )
-        session_store.upsert_session(session_name, new_sid)
-        _put(SessionReady(
-            session=session_name,
-            session_id=new_sid,
-            resumed=bool(prior_session_id),
-        ))
+        new_sid = _extract_session_id_from_lines(stdout_lines) or prior_session_id
+        # Never persist a locally fabricated UUID: Cursor does not know it and
+        # the following turn would fail with `--resume <fake-id>`.  Modern
+        # stream-json always emits an init/session id; legacy output may not.
+        if new_sid:
+            session_store.upsert_session(session_name, new_sid)
+            _put(SessionReady(
+                session=session_name,
+                session_id=new_sid,
+                resumed=bool(prior_session_id),
+            ))
 
     if proc.returncode != 0:
         tail = _nonzero_exit_tail(proc, stderr_out, stdout_lines)
@@ -737,6 +759,18 @@ async def _cursor_worker(name: str) -> None:
 
     while True:
         turn = await turn_q.get()
+        prior_session_id = turn.prior_session_id
+        # Turns can be queued before the first subprocess has returned its
+        # chat id. Resolve continuity at execution time, after the preceding
+        # turn has stored the real Cursor id. Automation sessions deliberately
+        # remain isolated and never resume.
+        if prior_session_id is None:
+            from devscope_bridge.session_hygiene import is_automation_session
+            if not is_automation_session(name):
+                entry = session_store.get_session(name)
+                stored_sid = entry.get("session_id") if entry else None
+                if stored_sid and _looks_like_uuid(str(stored_sid)):
+                    prior_session_id = str(stored_sid)
         _cursor_running[name] = True
         cursor_watchdog.begin_turn(name)
         medic_active = asyncio.Event()
@@ -754,7 +788,7 @@ async def _cursor_worker(name: str) -> None:
             await asyncio.to_thread(
                 _run_cursor_streaming_blocking,
                 turn.prompt,
-                turn.prior_session_id,
+                prior_session_id,
                 turn.cwd,
                 turn.mode,
                 turn.model,

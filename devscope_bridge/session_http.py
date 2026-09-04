@@ -23,16 +23,24 @@ from devscope_bridge import builtin_commands as _builtins
 from devscope_bridge.agents_scanner import scan_agents
 from devscope_bridge.bridge_auth import require_auth, validate_session_name, SESSION_NAME_RE
 from devscope_bridge.commands_scanner import scan_commands
+from devscope_bridge.agents import VALID_AGENTS, keep_session_id_on_reset
 from devscope_bridge.models import (
-    OpenPathRequest, SessionCreateRequest, SessionInfo, SessionsResponse,
+    ClaudeSessionImportRequest,
+    DiscoverClaudeSessionsResponse,
+    DiscoveredClaudeSession,
+    DiscoveredLocalSession,
+    DiscoverLocalSessionsResponse,
+    LocalSessionImportRequest,
+    OpenPathRequest,
+    SessionCreateRequest,
+    SessionInfo,
+    SessionsResponse,
 )
 from devscope_bridge.ws_session import resolve_out_queue
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-_VALID_AGENTS = {"claude", "cursor"}
 
 
 @router.get("/capabilities")
@@ -44,9 +52,6 @@ async def get_capabilities(auth: None = Depends(require_auth)) -> dict:
     caps = build_capabilities()
     caps["capabilities"] = await capability_registry.list_capabilities()
     return caps
-
-
-_VALID_AGENTS = {"claude", "cursor"}
 
 
 def _liveness_fields(name: str) -> dict:
@@ -82,6 +87,9 @@ async def list_sessions(auth: None = Depends(require_auth)) -> SessionsResponse:
             model=entry.get("model"),
             claude_agent=entry.get("claude_agent"),
             purpose=entry.get("purpose", "chat"),
+            display_title=entry.get("display_title"),
+            origin=entry.get("origin"),
+            claude_config_dir=entry.get("claude_config_dir"),
             **_liveness_fields(name),
         )
     return SessionsResponse(sessions=result)
@@ -95,8 +103,8 @@ async def create_session(
     """Register a new session with agent and cwd metadata. Does not spawn anything."""
     if not SESSION_NAME_RE.match(body.name):
         raise HTTPException(status_code=422, detail="Invalid session name")
-    if body.agent not in _VALID_AGENTS:
-        raise HTTPException(status_code=422, detail=f"agent must be one of {sorted(_VALID_AGENTS)}")
+    if body.agent not in VALID_AGENTS:
+        raise HTTPException(status_code=422, detail=f"agent must be one of {sorted(VALID_AGENTS)}")
     if not os.path.isabs(body.cwd):
         raise HTTPException(status_code=422, detail="cwd must be an absolute path")
     if not os.path.isdir(body.cwd):
@@ -118,7 +126,198 @@ async def create_session(
         mode=entry.get("mode"),
         model=entry.get("model"),
         purpose=entry.get("purpose", "chat"),
+        display_title=entry.get("display_title"),
+        origin=entry.get("origin"),
+        claude_config_dir=entry.get("claude_config_dir"),
     )
+
+
+@router.get("/claude-sessions/discover", response_model=DiscoverClaudeSessionsResponse)
+async def discover_claude_sessions(auth: None = Depends(require_auth)) -> DiscoverClaudeSessionsResponse:
+    """List Claude Code / Desktop sessions on disk. On-demand — not the poll path."""
+    from devscope_bridge import claude_session_index as index
+
+    items = await asyncio.to_thread(index.discover_sessions)
+    return DiscoverClaudeSessionsResponse(
+        items=[
+            DiscoveredClaudeSession(
+                session_id=item.session_id,
+                title=item.title,
+                cwd=item.cwd,
+                source=item.source,
+                last_used=item.last_used,
+                can_resume=item.can_resume,
+                already_imported=item.already_imported,
+                bridge_name=item.bridge_name,
+                config_dir=item.config_dir,
+            )
+            for item in items
+        ]
+    )
+
+
+@router.post("/claude-sessions/import", status_code=201)
+async def import_claude_session(
+    body: ClaudeSessionImportRequest,
+    auth: None = Depends(require_auth),
+) -> SessionInfo:
+    """Attach a discovered Claude conversation as a DevScope session (no spawn)."""
+    from devscope_bridge import claude_session_index as index
+
+    found = await asyncio.to_thread(index.lookup_session, body.session_id, body.source)
+    if found is None:
+        raise HTTPException(status_code=404, detail="Claude session not found on disk")
+    if found.already_imported and found.bridge_name:
+        existing = session_store.get_session(found.bridge_name)
+        if existing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Already imported as {found.bridge_name}",
+            )
+    if not found.can_resume:
+        raise HTTPException(status_code=422, detail="Session cannot be resumed from this machine")
+
+    entry = session_store.import_claude_session(
+        session_id=found.session_id,
+        source=found.source,
+        cwd=found.cwd,
+        display_title=found.title,
+        claude_config_dir=found.config_dir,
+    )
+    return SessionInfo(
+        name=entry["name"],
+        session_id=entry["session_id"],
+        created_at=entry["created_at"],
+        last_used=entry["last_used"],
+        active=False,
+        agent=entry.get("agent"),
+        cwd=entry.get("cwd"),
+        purpose=entry.get("purpose", "chat"),
+        display_title=entry.get("display_title"),
+        origin=entry.get("origin"),
+        claude_config_dir=entry.get("claude_config_dir"),
+    )
+
+
+def _imported_info(entry: dict) -> SessionInfo:
+    return SessionInfo(
+        name=entry["name"],
+        session_id=entry.get("session_id") or "",
+        created_at=entry["created_at"],
+        last_used=entry["last_used"],
+        active=False,
+        agent=entry.get("agent"),
+        cwd=entry.get("cwd"),
+        purpose=entry.get("purpose", "chat"),
+        display_title=entry.get("display_title"),
+        origin=entry.get("origin"),
+    )
+
+
+@router.get("/codex-sessions/discover", response_model=DiscoverLocalSessionsResponse)
+async def discover_codex_sessions(auth: None = Depends(require_auth)) -> DiscoverLocalSessionsResponse:
+    from devscope_bridge import codex_session_index as index
+
+    items = await asyncio.to_thread(index.discover_sessions)
+    return DiscoverLocalSessionsResponse(
+        items=[
+            DiscoveredLocalSession(
+                session_id=item.session_id,
+                title=item.title,
+                cwd=item.cwd,
+                source=item.source,
+                last_used=item.last_used,
+                can_resume=item.can_resume,
+                already_imported=item.already_imported,
+                bridge_name=item.bridge_name,
+                agent="codex",
+            )
+            for item in items
+        ]
+    )
+
+
+@router.post("/codex-sessions/import", status_code=201)
+async def import_codex_session(
+    body: LocalSessionImportRequest,
+    auth: None = Depends(require_auth),
+) -> SessionInfo:
+    from devscope_bridge import codex_session_index as index
+
+    found = await asyncio.to_thread(index.lookup_session, body.session_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="Codex session not found on disk")
+    if found.already_imported and found.bridge_name:
+        raise HTTPException(status_code=409, detail=f"Already imported as {found.bridge_name}")
+    entry = session_store.import_external_session(
+        session_id=found.session_id,
+        agent="codex",
+        source=found.source,
+        cwd=found.cwd,
+        display_title=found.title,
+    )
+    return _imported_info(entry)
+
+
+@router.get("/codex-models")
+async def list_codex_models(auth: None = Depends(require_auth)) -> dict:
+    from devscope_bridge import codex_session_index as index
+
+    return {"models": await asyncio.to_thread(index.read_models_cache)}
+
+
+@router.get("/antigravity-sessions/discover", response_model=DiscoverLocalSessionsResponse)
+async def discover_antigravity_sessions(
+    auth: None = Depends(require_auth),
+) -> DiscoverLocalSessionsResponse:
+    from devscope_bridge import agy_session_index as index
+
+    items = await asyncio.to_thread(index.discover_sessions)
+    return DiscoverLocalSessionsResponse(
+        items=[
+            DiscoveredLocalSession(
+                session_id=item.session_id,
+                title=item.title,
+                cwd=item.cwd,
+                source=item.source,
+                last_used=item.last_used,
+                can_resume=item.can_resume,
+                already_imported=item.already_imported,
+                bridge_name=item.bridge_name,
+                agent="antigravity",
+                seed_summary=bool(item.seed_summary),
+            )
+            for item in items
+        ]
+    )
+
+
+@router.post("/antigravity-sessions/import", status_code=201)
+async def import_antigravity_session(
+    body: LocalSessionImportRequest,
+    auth: None = Depends(require_auth),
+) -> SessionInfo:
+    from devscope_bridge import agy_session_index as index
+
+    found = await asyncio.to_thread(index.lookup_session, body.session_id, body.source)
+    if found is None:
+        raise HTTPException(status_code=404, detail="Antigravity session not found on disk")
+    if found.already_imported and found.bridge_name:
+        raise HTTPException(status_code=409, detail=f"Already imported as {found.bridge_name}")
+    if not found.can_resume and not found.seed_summary:
+        raise HTTPException(
+            status_code=422,
+            detail="IDE conversation cannot be resumed; no task/walkthrough summary found",
+        )
+    entry = session_store.import_external_session(
+        session_id=found.session_id if found.can_resume else "",
+        agent="antigravity",
+        source=found.source,
+        cwd=found.cwd,
+        display_title=found.title,
+        seed_summary=None if found.can_resume else found.seed_summary,
+    )
+    return _imported_info(entry)
 
 
 @router.delete("/sessions/{name}", status_code=204)
@@ -144,7 +343,7 @@ async def reset_session_endpoint(name: str, auth: None = Depends(require_auth)) 
     """Kill a hung subprocess without deleting session metadata.
 
     Claude: clear session_id when resume would replay a broken turn.
-    Cursor: keep chatId so --resume continues the thread.
+    Cursor / Codex / Antigravity: keep resume id so the thread continues.
     """
     name = validate_session_name(name)
     entry = session_store.get_session(name)
@@ -152,7 +351,7 @@ async def reset_session_endpoint(name: str, auth: None = Depends(require_auth)) 
         raise HTTPException(status_code=404, detail="Session not found")
     agent = entry.get("agent", "claude")
     await session_manager.kill_session(name)
-    if agent != "cursor":
+    if not keep_session_id_on_reset(agent):
         session_store.clear_session_id(name)
 
 

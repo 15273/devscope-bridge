@@ -153,10 +153,52 @@ async def run(
     timeout_s: float = 120.0,
 ) -> str:
     """Run one scoped cockpit query. Returns '' on failure."""
+    from devscope_bridge.agents import parse_agent
+    agent = parse_agent(agent, "cursor")
     sys = system_prompt + (_MCP_HINT if agent == "cursor" else "")
     if agent == "cursor":
         name = session_name or "wa-cockpit"
         return await _run_cursor(
             sys, user_text, session_name=name, model=model, mode=mode, timeout_s=timeout_s,
         )
+    if agent in ("codex", "antigravity"):
+        name = session_name or f"wa-cockpit-{agent}"
+        return await _run_via_manager(
+            sys, user_text, name=name, agent=agent, model=model, mode=mode, timeout_s=timeout_s,
+        )
     return await _run_claude(sys, user_text, timeout_s)
+
+
+async def _run_via_manager(
+    system_prompt: str,
+    user_text: str,
+    *,
+    name: str,
+    agent: str,
+    model: str | None,
+    mode: str | None,
+    timeout_s: float,
+) -> str:
+    if session_store.get_session(name) is None:
+        session_store.create_session_metadata(
+            name, agent, session_store.DEFAULT_CWD, mode=mode, model=model,
+        )
+    q = await session_manager.run_prompt(
+        name, system_prompt + "\n\n---\n\n" + user_text, mode=mode, model=model,
+    )
+    parts: list[str] = []
+    try:
+        async with asyncio.timeout(timeout_s):
+            while True:
+                frame = await q.get()
+                if isinstance(frame, AiChunk):
+                    parts.append(frame.text)
+                elif isinstance(frame, AiError):
+                    logger.warning("cockpit_agent %s: %s", agent, frame.stderr_tail[:200])
+                    break
+                elif isinstance(frame, AiDone):
+                    break
+    except TimeoutError:
+        logger.warning("cockpit_agent %s: timed out after %.0fs", agent, timeout_s)
+        session_manager.interrupt_session(name)
+    return "".join(parts).strip()

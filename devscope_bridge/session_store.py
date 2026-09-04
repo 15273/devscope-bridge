@@ -43,6 +43,9 @@ def _apply_defaults(entry: dict) -> dict:
     entry.setdefault("model", None)
     entry.setdefault("claude_agent", None)
     entry.setdefault("purpose", "chat")
+    entry.setdefault("display_title", None)
+    entry.setdefault("origin", "devscope")
+    entry.setdefault("claude_config_dir", None)
     return entry
 
 
@@ -209,6 +212,9 @@ def create_session_metadata(
         "mode": mode,
         "model": model,
         "purpose": purpose or "chat",
+        "display_title": None,
+        "origin": "devscope",
+        "claude_config_dir": None,
     }
     sessions[name] = entry
     save_sessions(sessions)
@@ -217,6 +223,118 @@ def create_session_metadata(
         name, agent, cwd, mode, model, entry["purpose"],
     )
     return entry
+
+
+def import_claude_session(
+    *,
+    session_id: str,
+    source: str,
+    cwd: str | None = None,
+    display_title: str | None = None,
+    claude_config_dir: str | None = None,
+    name: str | None = None,
+) -> dict:
+    """Attach an existing Claude conversation as a DevScope session.
+
+    ``session_id`` is the CLI UUID used with ``claude --resume``. If ``cwd`` is
+    missing or not a directory, fall back to DEFAULT_CWD (never 422).
+    If this UUID is already owned, return that entry instead of creating a duplicate.
+    """
+    owner = session_id_owner(session_id)
+    if owner:
+        entry = get_session(owner)
+        if entry is not None:
+            return {**entry, "name": owner}
+
+    from devscope_bridge.claude_session_index import allocate_import_name
+
+    resolved_cwd = cwd if cwd and os.path.isabs(cwd) and os.path.isdir(cwd) else DEFAULT_CWD
+    sessions = load_sessions()
+    chosen = name or allocate_import_name(source, session_id, set(sessions))
+    if chosen in sessions:
+        chosen = allocate_import_name(source, session_id, set(sessions))
+    entry = {
+        "session_id": session_id,
+        "created_at": _now_str(),
+        "last_used": _now_str(),
+        "agent": DEFAULT_AGENT,
+        "cwd": resolved_cwd,
+        "mode": None,
+        "model": None,
+        "purpose": "chat",
+        "display_title": display_title,
+        "origin": source,
+        "claude_config_dir": claude_config_dir,
+    }
+    sessions[chosen] = entry
+    save_sessions(sessions)
+    logger.info(
+        "Imported Claude session '%s' origin=%s id=%s cwd=%s",
+        chosen, source, session_id, resolved_cwd,
+    )
+    return {**entry, "name": chosen}
+
+
+def import_external_session(
+    *,
+    session_id: str,
+    agent: str,
+    source: str,
+    cwd: str | None = None,
+    display_title: str | None = None,
+    name: str | None = None,
+    seed_summary: str | None = None,
+) -> dict:
+    """Attach a Codex / Antigravity conversation as a DevScope session."""
+    if session_id:
+        owner = session_id_owner(session_id)
+        if owner:
+            entry = get_session(owner)
+            if entry is not None:
+                return {**entry, "name": owner}
+
+    from devscope_bridge.agents import parse_agent
+    from devscope_bridge.codex_session_index import allocate_import_name as alloc_codex
+    from devscope_bridge.agy_session_index import allocate_import_name as alloc_agy
+
+    resolved_cwd = cwd if cwd and os.path.isabs(cwd) and os.path.isdir(cwd) else DEFAULT_CWD
+    sessions = load_sessions()
+    taken = set(sessions)
+    if name and name not in taken:
+        chosen = name
+    elif agent == "codex":
+        chosen = alloc_codex(session_id or "unknown", taken)
+    else:
+        chosen = alloc_agy(source, session_id or "unknown", taken)
+    if chosen in sessions:
+        chosen = f"{chosen}-{len(sessions)}"
+    entry = {
+        "session_id": session_id or "",
+        "created_at": _now_str(),
+        "last_used": _now_str(),
+        "agent": parse_agent(agent),
+        "cwd": resolved_cwd,
+        "mode": None,
+        "model": None,
+        "purpose": "chat",
+        "display_title": display_title,
+        "origin": source,
+        "claude_config_dir": None,
+    }
+    sessions[chosen] = entry
+    save_sessions(sessions)
+    if seed_summary:
+        append_bridge_turn(chosen, "assistant", seed_summary)
+        from devscope_bridge import builtin_commands as _builtins
+        _builtins.pending_compact_preambles[chosen] = (
+            "Continue this imported Antigravity IDE conversation. Prior notes:\n\n"
+            + seed_summary[:8000]
+        )
+    logger.info(
+        "Imported session '%s' agent=%s origin=%s id=%s cwd=%s",
+        chosen, agent, source, session_id, resolved_cwd,
+    )
+    return {**entry, "name": chosen}
 
 
 def delete_session(name: str) -> bool:
@@ -249,8 +367,19 @@ def transcript_path(name: str) -> str | None:
     session_id = entry["session_id"] if entry else None
     if not session_id:
         return None
+    config_dir = (entry or {}).get("claude_config_dir")
+    if config_dir:
+        isolated = list(Path(config_dir).glob(f"projects/*/{session_id}.jsonl"))
+        if isolated:
+            return str(isolated[0])
+        # An explicitly isolated Claude profile must never fall through to the
+        # user's default profile. Apart from breaking import when UUIDs collide,
+        # that would expose a transcript belonging to a different profile.
+        return None
     matches = list((Path.home() / ".claude" / "projects").glob(f"*/{session_id}.jsonl"))
-    return str(matches[0]) if matches else None
+    if matches:
+        return str(matches[0])
+    return None
 
 
 def _entry_text(entry: dict) -> str:
@@ -414,7 +543,7 @@ def sync_bridge_transcript(name: str, turns: list[dict]) -> None:
         role = turn.get("role")
         text = (turn.get("text") or "").strip()
         if role in ("user", "assistant") and text:
-            cleaned.append({"role": role, "text": text[:8000]})
+            cleaned.append({"role": role, "text": text[:100_000]})
     if not cleaned:
         return
     existing = _read_bridge_turns(name)
@@ -468,7 +597,7 @@ def reset_bridge_transcript(name: str, *, seed_turns: list[dict] | None = None) 
             text = (entry.get("text") or "").strip()
             if role in ("user", "assistant") and text:
                 fh.write(
-                    json.dumps({"role": role, "text": text[:8000], "ts": _now_str()}, ensure_ascii=False)
+                    json.dumps({"role": role, "text": text[:100_000], "ts": _now_str()}, ensure_ascii=False)
                     + "\n"
                 )
     logger.info(

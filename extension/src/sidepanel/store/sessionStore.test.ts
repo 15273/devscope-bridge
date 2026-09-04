@@ -92,6 +92,54 @@ describe('history load race', () => {
   });
 });
 
+describe('session metadata compatibility', () => {
+  it('preserves live turn and Claude subagent when an older bridge omits optional fields', () => {
+    const now = new Date().toISOString();
+    let state = storeReducer(INITIAL_STATE, {
+      type: 'SET_SESSIONS',
+      infos: {
+        s1: {
+          session_id: 's1', created_at: now, last_used: now, active: true,
+          agent: 'claude', cwd: '/tmp', turn_running: true, claude_agent: 'reviewer',
+        },
+      },
+    });
+    state = storeReducer(state, {
+      type: 'SET_SESSIONS',
+      infos: {
+        s1: { session_id: 's1', created_at: now, last_used: now, active: true },
+      },
+    });
+    expect(state.sessions.s1.turnRunning).toBe(true);
+    expect(state.sessions.s1.claude_agent).toBe('reviewer');
+  });
+
+  it('keeps create-time model and Claude subagent in optimistic state', () => {
+    const state = storeReducer(INITIAL_STATE, {
+      type: 'ADD_SESSION',
+      name: 's1', agent: 'claude', cwd: '/tmp', model: 'sonnet', claudeAgent: 'reviewer',
+    });
+    expect(state.sessions.s1.model).toBe('sonnet');
+    expect(state.sessions.s1.claude_agent).toBe('reviewer');
+  });
+});
+
+describe('reconnect status isolation', () => {
+  it('ignores reconnect status emitted by a background session', () => {
+    const now = new Date().toISOString();
+    let state = storeReducer(INITIAL_STATE, {
+      type: 'SET_SESSIONS',
+      infos: {
+        active: { session_id: 'active', created_at: now, last_used: now, active: true },
+        worker: { session_id: 'worker', created_at: now, last_used: now, active: true },
+      },
+    });
+    state = storeReducer(state, { type: 'SET_RECONNECTING', value: true, session: 'active' });
+    state = storeReducer(state, { type: 'SET_RECONNECTING', value: false, session: 'worker' });
+    expect(state.reconnecting).toBe(true);
+  });
+});
+
 describe('LOAD_TRANSCRIPT empty streaming backfill', () => {
   it('allows non-force load when the streaming bubble is empty (missed WS)', () => {
     let state = sessionWithLoading('s1');

@@ -14,6 +14,7 @@ import {
   MessageSquare,
   Plus,
   Settings as SettingsIcon,
+  HardDrive,
   TerminalSquare,
   Trash2,
 } from 'lucide-react';
@@ -41,6 +42,7 @@ interface SessionSidebarProps {
   activeSession: string | null;
   onSelect: (name: string) => void;
   onNewChat: () => void;
+  onImportClaude: () => void;
   onNewTask: () => void;
   onDelete: (name: string) => void;
   onSettingsClick: () => void;
@@ -68,6 +70,7 @@ export function SessionSidebar({
   activeSession,
   onSelect,
   onNewChat,
+  onImportClaude,
   onNewTask,
   onDelete,
   onSettingsClick,
@@ -110,6 +113,14 @@ export function SessionSidebar({
             className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-colors duration-fast ease-tool hover:bg-surface-overlay hover:text-signal"
           >
             <ListPlus size={16} strokeWidth={2} />
+          </button>
+          <button
+            onClick={onImportClaude}
+            aria-label="Import local agent sessions"
+            title="ייבוא Claude / Codex / Antigravity"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-colors duration-fast ease-tool hover:bg-surface-overlay hover:text-signal"
+          >
+            <HardDrive size={15} strokeWidth={2} />
           </button>
           <button
             onClick={onNewChat}
@@ -459,9 +470,9 @@ function SessionRow({
           )}
           <span
             className={`truncate text-xs ${isActive ? 'font-semibold text-fg' : 'font-medium text-fg-muted'}`}
-            title={session.name}
+            title={session.displayTitle || session.name}
           >
-            {session.name}
+            {session.displayTitle || session.name}
           </span>
         </span>
         <div className="flex flex-shrink-0 items-center">

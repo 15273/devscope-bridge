@@ -7,6 +7,7 @@
  */
 import type { ChatMessage } from '../store/sessionStore';
 import type { AgentMode, Agent, ElementContext, PageAttachment } from '@/shared/frames';
+import { parseAgent } from '@/shared/agents';
 import type { BrowseBackend } from '@/shared/browseBackend';
 import { safeLocalSet } from '@/shared/storageWrite';
 
@@ -391,7 +392,7 @@ export async function loadWaAssistPrefs(): Promise<WaAssistPrefs> {
   const result = await chrome.storage.local.get(WA_ASSIST_PREFS_KEY);
   const stored = result[WA_ASSIST_PREFS_KEY] as Partial<WaAssistPrefs> | undefined;
   if (!stored) return { ...DEFAULT_WA_ASSIST_PREFS };
-  const agent = stored.agent === 'claude' ? 'claude' : 'cursor';
+  const agent = parseAgent(stored.agent, 'cursor');
   const mode =
     stored.mode === 'plan' || stored.mode === 'inspect' || stored.mode === 'test'
       ? stored.mode

@@ -42,3 +42,27 @@ def test_build_scheduled_instruction_appends_playbook():
     )
     assert text.startswith("Post update")
     assert "Click publish" in text
+
+
+def test_watch_only_playbook_still_formats():
+    block = format_playbook_block({
+        "watch": {
+            "allow_auto_engage": True,
+            "like_new": False,
+            "like_keywords": ["hiring"],
+            "seen_urns": ["urn:li:activity:1"],
+        },
+    })
+    assert "LinkedIn watch" in block
+    assert "hiring" in block
+    assert "seen_urns (1)" in block
+
+
+def test_merge_playbook_updates_watch_seen_ids():
+    base = parse_playbook({
+        "watch": {"allow_auto_engage": True, "seen_urns": ["a"], "like_keywords": ["x"]},
+    })
+    merged = merge_playbook(base, {"watch": {"seen_urns": ["a", "b"]}})
+    assert merged["watch"]["allow_auto_engage"] is True
+    assert merged["watch"]["like_keywords"] == ["x"]
+    assert merged["watch"]["seen_urns"] == ["a", "b"]

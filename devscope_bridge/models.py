@@ -328,6 +328,12 @@ class PermAck(BaseModel):
 
 from devscope_bridge.models_rest import (  # noqa: E402,F401
     ApprovalRequest,
+    ClaudeSessionImportRequest,
+    DiscoverClaudeSessionsResponse,
+    DiscoverLocalSessionsResponse,
+    DiscoveredClaudeSession,
+    DiscoveredLocalSession,
+    LocalSessionImportRequest,
     EmployeeNote,
     HealthResponse,
     OpenPathRequest,

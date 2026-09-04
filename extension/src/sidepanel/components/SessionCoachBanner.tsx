@@ -49,7 +49,7 @@ export function SessionCoachBanner({
         {suggested && onSwitchModel && (
           <button
             type="button"
-            onClick={() => onSwitchModel(suggested.id)}
+            onClick={() => suggested.id && onSwitchModel(suggested.id)}
             className="flex items-center gap-1 rounded-sm border border-signal/40 bg-surface px-2 py-1 font-medium text-signal transition-colors hover:bg-signal-subtle"
           >
             <Cpu size={11} strokeWidth={2} />

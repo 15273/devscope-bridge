@@ -6,7 +6,7 @@
  */
 
 /** Installed in each frame; long-lived until cleanup. */
-export function annotateModeInjected(): void {
+export function annotateModeInjected(): { started: boolean; frameUrl: string; isTop: boolean } {
   const NS = 'data-devscope-annotate';
   const PREV = 'data-ds-prev-outline';
   const SIGNAL = '#E86D13';

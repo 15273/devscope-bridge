@@ -34,15 +34,28 @@ def pytest_collection_modifyitems(config, items):
 
 
 @pytest.fixture(autouse=True)
-def patch_startup_token(monkeypatch):
+def patch_startup_token(monkeypatch, tmp_path):
     """
     Replace the bridge startup token with a known value for all tests.
     Also keeps _active_ws and _pending_actions clean between tests.
     """
     import devscope_bridge.main as bridge_main
     import devscope_bridge.browser_relay as relay
+    import devscope_bridge.session_store as session_store
+    import devscope_bridge.board_state as board_state
+    import devscope_bridge.pty_manager as pty_manager
 
     monkeypatch.setattr(bridge_main, "_startup_token", "test-token-abc123")
+    monkeypatch.setattr(session_store, "BRIDGE_DIR", tmp_path)
+    monkeypatch.setattr(session_store, "SESSIONS_FILE", tmp_path / "sessions.json")
+    # No test may leak bridge transcripts into the developer's real home.
+    monkeypatch.setattr(
+        session_store,
+        "BRIDGE_TRANSCRIPTS_DIR",
+        tmp_path / "chat-transcripts",
+    )
+    monkeypatch.setattr(board_state, "_STATE_PATH", tmp_path / "board_state.json")
+    monkeypatch.setattr(pty_manager, "_PTY_SESSIONS_FILE", tmp_path / "pty_sessions.json")
     relay._active_ws.clear()
     relay._pending_actions.clear()
     relay._action_session.clear()

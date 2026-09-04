@@ -1,8 +1,10 @@
 # DevScope
 
 [![CI](https://github.com/15273/devscope-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/15273/devscope-bridge/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Local Chrome side-panel for **Claude Code** (and optionally Cursor).
+Local Chrome side-panel for **Claude Code**, **Cursor**, **Codex**, and
+**Antigravity** sessions.
 
 Three pieces:
 
@@ -10,8 +12,9 @@ Three pieces:
 2. **Browser** — bind a tab; Claude can read and click through MCP
 3. **Connection** — a loopback-only Python bridge on `127.0.0.1:7878`
 
-The bridge launches your already-installed `claude` / `cursor-agent`. Nothing
-is sent to a DevScope cloud — there isn’t one. Auth is a local token
+The bridge launches your already-installed CLI/IDE adapters (`claude`,
+`cursor-agent`, `codex`, or Antigravity headless mode). Nothing is sent to a
+DevScope cloud — there isn’t one. Auth is a local token
 (`~/.dev-bridge/token`, chmod 0600). The process refuses to bind anywhere
 except loopback.
 
@@ -72,15 +75,19 @@ somewhere you can't see it.
 | Thing | Why |
 |---|---|
 | macOS or Linux, Python **3.11+** | Runs the bridge |
-| [Claude CLI](https://claude.ai/download) logged in (`claude login`) | The agent |
+| [Claude CLI](https://claude.ai/download) logged in (`claude login`) | Claude sessions |
 | Chrome | Hosts the side panel |
 | Node.js 18+ | Builds the extension once |
-| Cursor CLI (optional) | Only if you create Cursor-agent sessions |
+| Cursor CLI (optional) | Cursor sessions |
+| Codex CLI (optional) | Codex sessions and app-server resume/steering |
+| Antigravity IDE/CLI (optional) | Antigravity headless sessions |
 
-Verify Claude is on PATH:
+Verify the adapters you plan to use are available:
 
 ```bash
 which claude && claude --version
+which cursor-agent && cursor-agent --version   # optional
+which codex && codex --version                 # optional
 ```
 
 ---
@@ -287,7 +294,7 @@ devscope_bridge/     Python package (FastAPI bridge + MCP stdio servers)
   session_http.py    REST: sessions, transcript, browser actions
   ws_session.py      Chat WebSocket
   pty_ws.py          Interactive terminal
-  session_manager.py Claude/Cursor process + run_prompt
+  session_manager*.py Claude/Cursor/Codex/Antigravity process adapters
   orchestrator*.py   Tick loop + pure decision logic for the agent hierarchy
   agent_policies.py  System prompts and the worker approval policy
   task_store.py      Persistent task board
@@ -326,6 +333,11 @@ Step-by-step setup guide: [docs/SETUP.md](docs/SETUP.md) (English) ·
 
 PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
+Setup help: [SUPPORT.md](SUPPORT.md).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
 
 ## Privacy
 

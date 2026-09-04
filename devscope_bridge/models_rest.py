@@ -16,6 +16,7 @@ class SessionInfo(BaseModel):
     created_at: str
     last_used: str
     active: bool
+    name: str | None = None
     turn_running: bool = False
     agent: str | None = None
     cwd: str | None = None
@@ -33,6 +34,9 @@ class SessionInfo(BaseModel):
     turn_elapsed_s: float | None = None        # seconds into the current turn
     queued_turns: int = 0                      # steering messages waiting on a new turn
     awaiting: str | None = None                # "plan" | "ask_user" | "tool_blocked" | None
+    display_title: str | None = None
+    origin: str | None = None
+    claude_config_dir: str | None = None
 
 
 class SessionCreateRequest(BaseModel):
@@ -43,6 +47,49 @@ class SessionCreateRequest(BaseModel):
     model: str | None = None
     claude_agent: str | None = None
     purpose: str | None = "chat"
+
+
+class DiscoveredClaudeSession(BaseModel):
+    session_id: str
+    title: str
+    cwd: str
+    source: str
+    last_used: str
+    can_resume: bool
+    already_imported: bool = False
+    bridge_name: str | None = None
+    config_dir: str | None = None
+
+
+class DiscoverClaudeSessionsResponse(BaseModel):
+    items: list[DiscoveredClaudeSession] = Field(default_factory=list)
+
+
+class ClaudeSessionImportRequest(BaseModel):
+    session_id: str
+    source: str
+
+
+class DiscoveredLocalSession(BaseModel):
+    session_id: str
+    title: str
+    cwd: str
+    source: str
+    last_used: str
+    can_resume: bool
+    already_imported: bool = False
+    bridge_name: str | None = None
+    agent: str = "claude"
+    seed_summary: bool = False
+
+
+class DiscoverLocalSessionsResponse(BaseModel):
+    items: list[DiscoveredLocalSession] = Field(default_factory=list)
+
+
+class LocalSessionImportRequest(BaseModel):
+    session_id: str
+    source: str
 
 
 class OpenPathRequest(BaseModel):

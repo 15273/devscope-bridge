@@ -24,6 +24,7 @@ def empty_playbook() -> dict[str, Any]:
         "checklist": [],
         "last_success_at": None,
         "learned_from_runs": 0,
+        "watch": {},
     }
 
 
@@ -50,7 +51,7 @@ def merge_playbook(existing: dict[str, Any], patch: dict[str, Any]) -> dict[str,
     for key, val in patch.items():
         if val is None:
             continue
-        if key in ("selectors", "fields") and isinstance(val, dict):
+        if key in ("selectors", "fields", "watch") and isinstance(val, dict):
             current = out.get(key) if isinstance(out.get(key), dict) else {}
             current.update(val)
             out[key] = current
@@ -73,7 +74,8 @@ def format_playbook_block(playbook: dict[str, Any]) -> str:
     """Human-readable block injected into worker instructions."""
     pb = parse_playbook(playbook)
     if not any([pb.get("site"), pb.get("entry_urls"), pb.get("workflow"),
-                pb.get("selectors"), pb.get("notes"), pb.get("checklist")]):
+                pb.get("selectors"), pb.get("notes"), pb.get("checklist"),
+                pb.get("watch")]):
         return ""
 
     lines = [
@@ -108,6 +110,10 @@ def format_playbook_block(playbook: dict[str, Any]) -> str:
         lines.append(f"Notes:\n{pb['notes']}")
     if pb.get("last_success_at"):
         lines.append(f"Last success: {pb['last_success_at']}")
+    from devscope_bridge.linkedin_watch import format_watch_block
+    watch_block = format_watch_block(pb.get("watch"))
+    if watch_block:
+        lines.append(watch_block)
     return "\n".join(lines)
 
 

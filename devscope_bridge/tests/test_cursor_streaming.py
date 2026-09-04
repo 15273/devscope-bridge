@@ -211,6 +211,16 @@ def test_parse_line_to_delta_accumulates_assistant_cumulative():
     assert acc2 == "Hi there"
 
 
+def test_text_deltas_update_accumulator_and_final_result_is_not_duplicated():
+    first = json.dumps({"type": "text_delta", "text": "Hello"})
+    second = json.dumps({"type": "text_delta", "text": " world"})
+    final = json.dumps({"type": "result", "result": "Hello world"})
+    d1, acc, _ = cursor_mod._parse_line_to_delta(first, "")
+    d2, acc, _ = cursor_mod._parse_line_to_delta(second, acc)
+    d3, acc, _ = cursor_mod._parse_line_to_delta(final, acc)
+    assert (d1, d2, d3, acc) == ("Hello", " world", None, "Hello world")
+
+
 def test_parse_chunk_non_json_plain_text():
     """Non-JSON lines are returned as plain text (legacy binary)."""
     assert cursor_mod._parse_chunk_from_event("Just plain text") == "Just plain text"
@@ -258,6 +268,12 @@ def test_extract_session_id_from_bare_uuid_first_line():
 
 def test_extract_session_id_returns_none_when_absent():
     lines = [json.dumps({"type": "text_delta", "text": "hi"}), "no uuid here"]
+    assert cursor_mod._extract_session_id_from_lines(lines) is None
+
+
+def test_tool_event_uuid_id_is_not_mistaken_for_chat_id():
+    tool_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    lines = [json.dumps({"type": "tool_call", "id": tool_id})]
     assert cursor_mod._extract_session_id_from_lines(lines) is None
 
 
@@ -721,7 +737,7 @@ def test_delta_from_cumulative_does_not_drop_legitimate_repeated_substring():
     cumulative = "read the log file"  # inside accum, but NOT a prefix of it
     delta, new_accum = cursor_mod._delta_from_cumulative(cumulative, accum)
     assert delta == cumulative
-    assert new_accum == cumulative
+    assert new_accum == accum + cumulative
 
 
 def test_delta_from_cumulative_still_suppresses_true_shrink_back():

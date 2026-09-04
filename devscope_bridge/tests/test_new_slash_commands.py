@@ -206,7 +206,8 @@ async def test_add_dir_duplicate_path_emits_already_added_card(monkeypatch, tmp_
 # 7. _build_claude_args extra_dirs wiring
 # ─────────────────────────────────────────────
 
-def test_build_claude_args_no_extra_dirs_omits_add_dir_flag():
+def test_build_claude_args_no_extra_dirs_omits_add_dir_flag(monkeypatch):
+    monkeypatch.delenv("DEVSCOPE_GLOBAL_ADD_DIRS", raising=False)
     args = mgr._build_claude_args(None)
     assert "--add-dir" not in args
 

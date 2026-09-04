@@ -128,3 +128,26 @@ async def test_serial_queue_runs_two_turns():
                     done_count += 1
 
     assert prompts == ["one", "two"]
+
+
+@pytest.mark.asyncio
+async def test_queued_second_turn_resumes_id_created_by_first(monkeypatch):
+    """A rapidly queued turn must resolve resume at execution time."""
+    calls: list[str | None] = []
+    sid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+    def _record(prompt, prior, cwd, mode, model, loop, q, session_name):
+        calls.append(prior)
+        if prompt == "one":
+            store.upsert_session(session_name, sid, agent="cursor")
+        _fast_blocking(prompt, prior, cwd, mode, model, loop, q, session_name)
+
+    monkeypatch.setattr(cursor_mod, "_run_cursor_streaming_blocking", _record)
+    q = await cursor_mod.dispatch_cursor("human-chat", "one", None, "/tmp")
+    await cursor_mod.dispatch_cursor("human-chat", "two", None, "/tmp")
+    done = 0
+    async with asyncio.timeout(5.0):
+        while done < 2:
+            done += isinstance(await q.get(), AiDone)
+
+    assert calls == [None, sid]

@@ -65,7 +65,8 @@ import { useSpeechRelay } from '../hooks/useSpeechRelay';
 import { useUiPrefs } from '../hooks/useUiPrefs';
 import { resolveSpeechLocale, speechLocaleFromPreference } from '../utils/speech/speechLocale';
 import { isTtsPlaying } from '../utils/speech/speechSynthesisCompat';
-const MAX_CHARS = 8000;
+/** Composer paste cap — not a Claude limit. 100k ≈ 25k tokens. */
+const MAX_CHARS = 100_000;
 
 /** Serialize chat messages to Markdown and trigger a browser download. */
 function downloadChatMarkdown(sessionName: string, msgs: ChatMessage[]): void {
@@ -212,12 +213,22 @@ export function Composer({
     void loadMode(sessionName).then((m) => {
       if (!cancelled) setMode(m);
     });
-    void loadModel(sessionName).then((m) => {
-      if (!cancelled) setModel(m);
-    });
-    void loadClaudeAgent(sessionName).then((a) => {
-      if (!cancelled) setClaudeAgent(a);
-    });
+    // Bridge metadata is authoritative when present. Do not let a slower local
+    // storage read overwrite a freshly-polled model/subagent after switching chats.
+    if (sessionModel === undefined) {
+      void loadModel(sessionName).then((m) => {
+        if (!cancelled) setModel(m);
+      });
+    } else {
+      setModel(sessionModel ?? null);
+    }
+    if (sessionClaudeAgent === undefined) {
+      void loadClaudeAgent(sessionName).then((a) => {
+        if (!cancelled) setClaudeAgent(a);
+      });
+    } else {
+      setClaudeAgent(sessionClaudeAgent ?? null);
+    }
     void loadBrowseBackend().then((b) => {
       if (!cancelled) setBrowseBackend(b);
     });
@@ -783,9 +794,7 @@ export function Composer({
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <BoundTabPill sessionName={sessionName} onBoundChange={onBoundTabChange} />
             <ModePill mode={mode} onChange={changeMode} />
-            {(agent === 'claude' || agent === 'cursor') && (
-              <ModelPill modelId={model} agent={agent} onChange={changeModel} />
-            )}
+            <ModelPill modelId={model} agent={agent} onChange={changeModel} />
             {agent === 'claude' && (
               <SubagentPill agentSlug={claudeAgent} onChange={changeClaudeAgent} />
             )}

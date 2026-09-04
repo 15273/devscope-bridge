@@ -15,6 +15,7 @@ export async function notifyAgentAction(
   tabId: number,
   selector?: string,
   coords?: { x: number; y: number },
+  action: 'click' | 'fill' | 'hover' = 'click',
 ): Promise<void> {
   const prefs = await uiPrefs();
   if (prefs.showClickHighlights) {
@@ -24,6 +25,7 @@ export async function notifyAgentAction(
         selector,
         x: coords?.x,
         y: coords?.y,
+        action,
       });
     } catch {
       /* restricted or no content script */

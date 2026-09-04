@@ -222,6 +222,10 @@ export interface SpeechSttStopMsg {
   kind: 'speech_stt_stop';
 }
 
+export interface PlayActionSoundMsg {
+  kind: 'play_action_sound';
+}
+
 /** Offscreen → side panel: transcript chunk or status change. */
 export interface SpeechSttEventMsg {
   kind: 'speech_stt_event';
@@ -253,6 +257,7 @@ export type ExtensionMsg =
   | RecordingStatusMsg
   | SpeechSttStartMsg
   | SpeechSttStopMsg
+  | PlayActionSoundMsg
   | SpeechSttEventMsg
   | RegisterPanelHostMsg
   | GetProfileIdentityMsg

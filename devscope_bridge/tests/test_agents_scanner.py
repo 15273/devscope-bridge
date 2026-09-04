@@ -5,11 +5,16 @@ from pathlib import Path
 from devscope_bridge import agents_scanner
 
 
-def test_scan_agents_finds_project_agents():
+def test_scan_agents_uses_default_project_root(tmp_path: Path, monkeypatch):
+    agents_dir = tmp_path / ".claude" / "agents"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "default-agent.md").write_text(
+        "---\nname: default-agent\ndescription: Default project agent.\n---\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(agents_scanner.session_store, "DEFAULT_CWD", str(tmp_path))
     agents = agents_scanner.scan_agents()
-    names = {a["name"] for a in agents}
-    assert "ht-backend-engineer" in names
-    assert all(a.get("description") for a in agents)
+    assert [agent["name"] for agent in agents] == ["default-agent"]
 
 
 def test_scan_agents_custom_dir(tmp_path: Path):

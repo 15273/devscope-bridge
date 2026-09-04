@@ -175,3 +175,36 @@ async def test_get_sessions_surfaces_liveness_fields():
     assert entry["turn_elapsed_s"] is not None
     assert entry["queued_turns"] == 0
     assert entry["awaiting"] is None
+
+
+# ─────────────────────────────────────────────
+# 7. A fresh turn must not inherit the previous turn's silence
+# ─────────────────────────────────────────────
+
+def test_new_turn_does_not_inherit_stale_output_clock():
+    """Regression: session 'ats_' was killed on every message for 17 hours.
+
+    _last_output_at is only ever written by touch_output (real stdout) and is
+    never reset when a turn starts. So a session whose agent produced no output
+    for hours measured that entire gap as the silence age of a turn that began
+    one second ago — instantly past the absolute cap. The stale sweeper then
+    killed the new turn before it could emit its first token, which bumped the
+    gap further, so every retry failed harder than the last.
+    """
+    from devscope_bridge import session_lifecycle
+
+    active = _fake_active("stale-clock-sess", turn_running=True)
+    # Last real stdout was 17 hours ago (the agent died mid-turn yesterday).
+    sr._last_output_at["stale-clock-sess"] = time.time() - 61_200
+    # A new turn was dispatched just now.
+    active.turn_started_at = datetime.now()
+    active.last_msg_at = datetime.now()
+
+    age = session_lifecycle._turn_silence_age_s(active, datetime.now())
+
+    assert age < 5.0, (
+        f"A turn that started now measured {age:.0f}s of silence, inherited "
+        "from the previous turn's last_output_at. The sweeper's absolute cap "
+        f"is {session_lifecycle._STALE_TURN_ABS_S:.0f}s, so this turn is killed "
+        "on the next sweep before producing anything."
+    )

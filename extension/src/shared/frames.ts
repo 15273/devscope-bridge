@@ -3,7 +3,7 @@
  *
  * Extension → Bridge
  */
-export type Agent = 'claude' | 'cursor';
+export type Agent = 'claude' | 'cursor' | 'codex' | 'antigravity';
 
 /** Operational mode — maps to claude/cursor CLI flags + system-prompt presets. */
 export type AgentMode = 'act' | 'plan' | 'inspect' | 'test';
@@ -386,6 +386,10 @@ export interface SessionInfo {
   created_at: string;
   last_used: string;
   active: boolean;
+  name?: string;
+  display_title?: string | null;
+  origin?: string | null;
+  claude_config_dir?: string | null;
   /** True while the bridge is waiting for a result event from the subprocess. */
   turn_running?: boolean;
   agent?: Agent;
@@ -424,4 +428,36 @@ export interface CreateSessionPayload {
   model?: string;
   claude_agent?: string | null;
   purpose?: string;
+}
+
+export type ClaudeSessionSource = 'claude_code' | 'desktop_code' | 'desktop_local';
+export type LocalSessionSource =
+  | ClaudeSessionSource
+  | 'codex'
+  | 'antigravity_cli'
+  | 'antigravity_ide';
+
+export interface DiscoveredClaudeSession {
+  session_id: string;
+  title: string;
+  cwd: string;
+  source: ClaudeSessionSource;
+  last_used: string;
+  can_resume: boolean;
+  already_imported: boolean;
+  bridge_name?: string | null;
+  config_dir?: string | null;
+}
+
+export interface DiscoveredLocalSession {
+  session_id: string;
+  title: string;
+  cwd: string;
+  source: LocalSessionSource;
+  last_used: string;
+  can_resume: boolean;
+  already_imported: boolean;
+  bridge_name?: string | null;
+  agent?: Agent;
+  seed_summary?: boolean;
 }

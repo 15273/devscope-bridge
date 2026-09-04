@@ -106,8 +106,8 @@ async def start_setup(
     instruction: str | None = None,
 ) -> dict[str, Any]:
     """Create draft + dedicated setup session. Returns draft dict."""
-    if agent not in ("claude", "cursor"):
-        agent = "claude"
+    from devscope_bridge.agents import parse_agent
+    agent = parse_agent(agent)
     if setup_mode not in ("inspect", "plan", "act"):
         setup_mode = "inspect"
 
@@ -194,9 +194,8 @@ def complete_draft(draft_id: str) -> dict[str, Any] | None:
 
 
 def runtime_from_schedule_template(tmpl: dict[str, Any]) -> tuple[str, str]:
-    agent = tmpl.get("agent") or "claude"
-    if agent not in ("claude", "cursor"):
-        agent = "claude"
+    from devscope_bridge.agents import parse_agent
+    agent = parse_agent(tmpl.get("agent") or "claude")
     mode = tmpl.get("mode") or "act"
     if mode not in ("act", "plan", "inspect", "test"):
         mode = "act"

@@ -1,9 +1,10 @@
 """
 session_manager.py — Manages persistent agent CLI subprocesses.
 
-Supports two agents:
-- "claude" : ONE persistent process per session using stream-json I/O.
-- "cursor"  : blocking subprocess per call, delegated to session_manager_cursor.
+Supports:
+- "claude" : persistent stream-json process
+- "cursor" : one-shot cursor-agent
+- "codex" / "antigravity" : one-shot CLIs (Codex may upgrade to app-server)
 
 Registry / spawn / recovery live in session_runtime, session_lifecycle,
 and session_recovery. This module keeps run_prompt + approvals so existing
@@ -20,6 +21,7 @@ from datetime import datetime
 
 from devscope_bridge import session_store
 from devscope_bridge import session_manager_cursor
+from devscope_bridge import oneshot_runner
 from devscope_bridge import session_reader
 from devscope_bridge import sub_agent_tracker
 from devscope_bridge.context_builder import build_context_preamble, extract_image_blocks
@@ -197,6 +199,35 @@ async def run_prompt(
             mode=effective_mode, model=effective_model,
         )
 
+    if agent in ("codex", "antigravity"):
+        resume_id = None if automation_turn else (prior_session_id or None)
+        if compact_pre:
+            full_prompt = compact_pre + _PREAMBLE_USER_MSG_SEPARATOR + full_prompt
+        if (
+            not automation_turn
+            and not compact_pre
+            and _cursor_needs_recovery_preamble(prompt, prior_session_id)
+        ):
+            recovery = build_recovery_preamble(name)
+            if recovery:
+                full_prompt = recovery + "\n\n---\n\n" + full_prompt
+        session_store.append_bridge_turn(name, "user", prompt)
+        logger.info(
+            "Session '%s' → %s (cwd=%s mode=%s resume=%s)",
+            name, agent, cwd, effective_mode, bool(resume_id),
+        )
+        if agent == "codex":
+            from devscope_bridge import session_manager_codex
+            return await session_manager_codex.dispatch_codex(
+                name, full_prompt, resume_id, cwd,
+                mode=effective_mode, model=effective_model,
+            )
+        from devscope_bridge import session_manager_agy
+        return await session_manager_agy.dispatch_agy(
+            name, full_prompt, resume_id, cwd,
+            mode=effective_mode, model=effective_model,
+        )
+
     # ── Claude persistent path ──────────────────────────────────────────
     # Terminal-first chat: when a chat-* PTY owns this session, messages go
     # through the interactive CLI — never spawn a competing headless process.
@@ -330,13 +361,24 @@ def is_active(name: str) -> bool:
     registries, never in `_sessions` — so this used to always report False
     for Cursor regardless of real liveness.
     """
-    if _session_agent(name) == "cursor":
+    agent = _session_agent(name)
+    if agent == "cursor":
         return session_manager_cursor.get_session_state(name) is not None
+    if agent == "codex":
+        from devscope_bridge import codex_app_server
+        if codex_app_server.has_session(name) or oneshot_runner.is_busy(name):
+            return True
+        return oneshot_runner.get_session_state(name) is not None
+    if agent == "antigravity":
+        return oneshot_runner.get_session_state(name) is not None
     return name in _sessions
 
 
 def is_turn_running(name: str) -> bool:
-    if session_manager_cursor.is_busy(name):
+    if session_manager_cursor.is_busy(name) or oneshot_runner.is_busy(name):
+        return True
+    from devscope_bridge import codex_app_server
+    if codex_app_server.is_busy(name):
         return True
     active = _sessions.get(name)
     return active is not None and not active.turn_done.is_set()
@@ -356,9 +398,18 @@ def get_session_state(name: str) -> dict | None:
     "silence" from message-send time, so a genuinely stuck turn could still
     report silent_for_s≈0 if the user had just sent it.
     """
-    if _session_agent(name) == "cursor":
+    agent = _session_agent(name)
+    if agent == "cursor":
         from devscope_bridge import session_manager_cursor
         return session_manager_cursor.get_session_state(name)
+    if agent == "codex":
+        from devscope_bridge import codex_app_server
+        state = codex_app_server.get_session_state(name)
+        if state:
+            return state
+        return oneshot_runner.get_session_state(name)
+    if agent == "antigravity":
+        return oneshot_runner.get_session_state(name)
     active = _sessions.get(name)
     if active is None:
         return None
@@ -384,10 +435,19 @@ def get_session_state(name: str) -> dict | None:
     }
 
 
-async def kill_session(name: str) -> None:
-    if _session_agent(name) == "cursor":
+async def kill_session(name: str, *, quiet: bool = False) -> None:
+    """Tear down the live subprocess. ``quiet=True`` skips the red AiError
+    (used by compact — the UI already has a compact card)."""
+    sub_agent_tracker.clear_session(name)
+    agent = _session_agent(name)
+    if agent == "cursor":
         session_manager_cursor.shutdown_cursor_session(name)
-    await _terminate_session(name)
+    elif agent in ("codex", "antigravity"):
+        from devscope_bridge import codex_app_server
+        oneshot_runner.shutdown(name)
+        if agent == "codex":
+            codex_app_server.shutdown(name)
+    await _terminate_session(name, notify_ui=not quiet)
 
 
 async def send_approval(
@@ -405,6 +465,9 @@ async def send_approval(
     tool_blocked + allow_once → respawn with bypassPermissions + retry prompt.
     deny / skip → no-op (turn already ended).
     """
+    from devscope_bridge import codex_app_server
+    if await codex_app_server.send_approval(name, request_id, option_id):
+        return True
     from devscope_bridge import session_reader
     meta = session_reader._pending_permissions.pop(request_id, None)
     if meta is None:
@@ -532,11 +595,25 @@ async def auto_approve_tool_blocked(
 
 def interrupt_session(name: str) -> bool:
     """Send SIGINT (Claude) or kill cursor-agent (Cursor). False if nothing to stop."""
-    if _session_agent(name) == "cursor":
+    agent = _session_agent(name)
+    if agent == "cursor":
         return session_manager_cursor.interrupt_cursor(name)
+    if agent == "codex":
+        from devscope_bridge import codex_app_server
+        if codex_app_server.interrupt(name):
+            return True
+        return oneshot_runner.interrupt(name)
+    if agent == "antigravity":
+        return oneshot_runner.interrupt(name)
 
     active = _sessions.get(name)
     if not active:
+        return False
+    # Stop is a turn-level operation. Sending SIGINT to an idle persistent
+    # Claude process kills a healthy session and can leave its resume state in
+    # an unnecessarily ambiguous state.
+    if active.turn_done.is_set():
+        logger.info("Stop ignored for idle session '%s'", name)
         return False
     active.turn_done.clear()  # watchdog checks this to avoid redundant respawn
     try:
@@ -577,4 +654,3 @@ async def _interrupt_watchdog(name: str, pid: int) -> None:
     )
     active.pending_preamble = preamble
     active.turn_done.set()
-

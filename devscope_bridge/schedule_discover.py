@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from devscope_bridge import browser_relay, session_manager, session_store
+from devscope_bridge.agents import parse_agent
 from devscope_bridge.schedule_playbook import parse_playbook
 
 logger = logging.getLogger(__name__)
@@ -141,7 +142,7 @@ async def discover_playbook(
         raw = await run_agent(
             _DISCOVER_SYSTEM,
             user_text,
-            agent=agent if agent in ("claude", "cursor") else "claude",
+            agent=parse_agent(agent),
             mode="inspect",
             session_name=session,
             timeout_s=timeout_s,
@@ -151,7 +152,8 @@ async def discover_playbook(
         return {"ok": False, "error": str(exc), "session": session}
 
     if not raw.strip():
-        agent_label = "Cursor" if agent == "cursor" else "Claude"
+        from devscope_bridge.agents import agent_label as _agent_label
+        agent_label = _agent_label(agent)
         return {
             "ok": False,
             "error": f"{agent_label} לא החזיר תשובה — נסה שוב או השתמש בצ'אט הגדרה",

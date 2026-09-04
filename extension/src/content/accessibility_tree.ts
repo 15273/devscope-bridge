@@ -29,9 +29,9 @@ function buildSelector(el: Element): string {
   let depth = 0;
   while (cur && cur !== document.documentElement && depth < 5) {
     let part = cur.tagName.toLowerCase();
-    const parent = cur.parentElement;
+    const parent: Element | null = cur.parentElement;
     if (parent) {
-      const siblings = Array.from(parent.children).filter((c) => c.tagName === cur!.tagName);
+      const siblings = Array.from(parent.children).filter((c: Element) => c.tagName === cur!.tagName);
       if (siblings.length > 1) {
         part += `:nth-of-type(${siblings.indexOf(cur) + 1})`;
       }

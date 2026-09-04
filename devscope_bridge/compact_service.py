@@ -334,7 +334,7 @@ async def apply_compact_reset(name: str, preamble: str, was_real_summary: bool) 
     agent = entry.get("agent", "claude") if entry else "claude"
     if agent == "claude":
         session_store.clear_session_id(name)
-        await session_manager.kill_session(name)
+        await session_manager.kill_session(name, quiet=True)
     session_reader.reset_session_usage(name)
     from devscope_bridge import builtin_commands as _builtins
     _builtins.pending_compact_preambles[name] = preamble

@@ -75,12 +75,12 @@ export function CapabilitiesPanel() {
                     </p>
                     <p className="mt-0.5 text-2xs text-fg-muted">{srv.description}</p>
                     <p className="mt-1 font-mono text-[10px] text-fg-subtle">{srv.tools_hint}</p>
-                    {!srv.ready && srv.status?.hint && (
-                      <p className="mt-1 text-2xs text-warning">{String(srv.status.hint)}</p>
+                    {!srv.ready && Boolean(srv.status?.hint) && (
+                      <p className="mt-1 text-2xs text-warning">{String(srv.status?.hint)}</p>
                     )}
-                    {!srv.ready && srv.status?.setup_command && (
+                    {!srv.ready && Boolean(srv.status?.setup_command) && (
                       <p className="mt-1 break-all font-mono text-[10px] text-fg-subtle">
-                        {String(srv.status.setup_command)}
+                        {String(srv.status?.setup_command)}
                       </p>
                     )}
                   </div>

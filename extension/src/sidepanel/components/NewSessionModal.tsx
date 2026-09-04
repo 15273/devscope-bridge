@@ -24,7 +24,7 @@ export function NewSessionModal({ existingNames, onSubmit, onClose }: NewSession
   const [nameError, setNameError] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [claudeAgent, setClaudeAgent] = useState<string | null>(null);
+  const [claudeAgent] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -102,7 +102,7 @@ export function NewSessionModal({ existingNames, onSubmit, onClose }: NewSession
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-[320px] rounded-lg border border-line bg-surface-overlay p-5 shadow-modal dark:shadow-modal-dark">
+      <div className="w-[360px] rounded-lg border border-line bg-surface-overlay p-5 shadow-modal dark:shadow-modal-dark">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-fg">New chat</h2>
           <button
@@ -158,6 +158,16 @@ export function NewSessionModal({ existingNames, onSubmit, onClose }: NewSession
               Use <span className="font-mono">/cursor-task</span> in chat for Notion &amp; other Cursor MCP plugins without switching agent.
             </p>
           )}
+          {agent === 'codex' && (
+            <p className="mt-1.5 text-xs leading-snug text-fg-muted">
+              Uses local <span className="font-mono">codex</span> (ChatGPT login in <span className="font-mono">~/.codex</span>). Add MCP servers in Codex config — DevScope does not inject them.
+            </p>
+          )}
+          {agent === 'antigravity' && (
+            <p className="mt-1.5 text-xs leading-snug text-fg-muted">
+              Requires the <span className="font-mono">agy</span> CLI. IDE chats can be imported from the hard-drive button (read-only unless the conversation id resumes).
+            </p>
+          )}
         </div>
 
         {/* Project */}
@@ -208,9 +218,11 @@ export function NewSessionModal({ existingNames, onSubmit, onClose }: NewSession
 
 function AgentSegment({ value, onChange }: { value: Agent; onChange: (a: Agent) => void }) {
   return (
-    <div className="inline-flex w-full rounded-md border border-line p-0.5 text-xs font-medium">
+    <div className="grid w-full grid-cols-2 gap-0.5 rounded-md border border-line p-0.5 text-xs font-medium">
       <AgentTab label="Claude" agent="claude" active={value === 'claude'} onClick={onChange} />
       <AgentTab label="Cursor" agent="cursor" active={value === 'cursor'} onClick={onChange} />
+      <AgentTab label="Codex" agent="codex" active={value === 'codex'} onClick={onChange} />
+      <AgentTab label="Antigravity" agent="antigravity" active={value === 'antigravity'} onClick={onChange} />
     </div>
   );
 }

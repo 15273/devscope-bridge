@@ -9,7 +9,8 @@
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { X, Send, Bot, User } from 'lucide-react';
-import type { Agent, AgentMode } from '@/shared/frames';
+import type { AgentMode } from '@/shared/frames';
+import { AGENTS, AGENT_LABELS } from '@/shared/agents';
 import type { UseCockpitReturn, AskResult } from './useCockpit';
 import { ConfirmSendDialog } from './ConfirmSendDialog';
 import { ModePill } from '../composer/ModePill';
@@ -87,6 +88,7 @@ function SuggestionSend({ suggestion, result, onSend }: SuggestionSendProps) {
   const [showConfirm, setShowConfirm] = useState(false);
 
   const handleConfirm = useCallback(async () => {
+    if (!result.chat_id) return;
     await onSend(result.chat_id, suggestion);
     setShowConfirm(false);
   }, [onSend, result.chat_id, suggestion]);
@@ -104,7 +106,7 @@ function SuggestionSend({ suggestion, result, onSend }: SuggestionSendProps) {
 
       {showConfirm && (
         <ConfirmSendDialog
-          chatName={result.chat_name}
+          chatName={result.chat_name ?? result.chat_id ?? 'Unknown chat'}
           text={suggestion}
           onConfirm={handleConfirm}
           onCancel={() => setShowConfirm(false)}
@@ -310,7 +312,7 @@ export function AssistChat({ ask, send, scopedChat, onClearScope }: AssistChatPr
       {/* Agent toolbar */}
       <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line bg-surface-raised px-3 py-1.5">
         <div className="flex items-center gap-0.5 rounded-md border border-line bg-surface p-0.5">
-          {(['cursor', 'claude'] as Agent[]).map((a) => (
+          {AGENTS.map((a) => (
             <button
               key={a}
               type="button"
@@ -320,7 +322,7 @@ export function AssistChat({ ask, send, scopedChat, onClearScope }: AssistChatPr
                 prefs.agent === a ? 'bg-signal text-signal-contrast' : 'text-fg-muted hover:text-fg',
               ].join(' ')}
             >
-              {a === 'cursor' ? 'Cursor' : 'Claude'}
+              {AGENT_LABELS[a]}
             </button>
           ))}
         </div>

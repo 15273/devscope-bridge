@@ -100,6 +100,21 @@ export function ScheduleDetailPanel({ schedule, onClose, onSaved }: ScheduleDeta
         <TextArea label="שלבים" value={workflow} onChange={setWorkflow} rows={5} mono />
         <TextArea label="Selectors (JSON)" value={selectorsJson} onChange={setSelectorsJson} rows={6} mono />
         <TextArea label="הערות" value={notes} onChange={setNotes} rows={3} />
+        {pb.watch && (
+          <div className="rounded-md border border-line bg-surface-raised p-2 text-2xs text-fg-muted">
+            <p className="mb-1 font-medium text-fg">LinkedIn watch</p>
+            <p>auto-engage: {pb.watch.allow_auto_engage ? 'כן' : 'לא'}</p>
+            <p>like-new: {pb.watch.like_new ? 'כן' : 'לא'}</p>
+            {(pb.watch.like_keywords?.length ?? 0) > 0 && (
+              <p>like: {pb.watch.like_keywords?.join(', ')}</p>
+            )}
+            {(pb.watch.comment_keywords?.length ?? 0) > 0 && (
+              <p>comment: {pb.watch.comment_keywords?.join(', ')}</p>
+            )}
+            <p>seen posts: {pb.watch.seen_urns?.length ?? 0}</p>
+            <p>seen notifications: {pb.watch.seen_notification_ids?.length ?? 0}</p>
+          </div>
+        )}
         {error && <p className="text-danger">{error}</p>}
       </div>
     </div>

@@ -105,6 +105,10 @@ export interface SessionState {
   name: string;
   agent: Agent;
   cwd: string;
+  /** Human title from an imported Claude conversation. */
+  displayTitle?: string | null;
+  /** devscope | claude_code | desktop_code | desktop_local */
+  origin?: string | null;
   /** chat | worker | manager | orchestrator — from bridge metadata */
   purpose?: string;
   /** Claude CLI model id for this session; unset = CLI default. */
@@ -176,7 +180,17 @@ export interface StoreState {
 
 export type StoreAction =
   | { type: 'SET_SESSIONS'; infos: Record<string, SessionInfo> }
-  | { type: 'ADD_SESSION'; name: string; agent: Agent; cwd: string; purpose?: string }
+  | {
+      type: 'ADD_SESSION';
+      name: string;
+      agent: Agent;
+      cwd: string;
+      purpose?: string;
+      displayTitle?: string | null;
+      origin?: string | null;
+      model?: string | null;
+      claudeAgent?: string | null;
+    }
   | { type: 'REMOVE_SESSION'; name: string }
   | { type: 'SET_ACTIVE'; name: string }
   | { type: 'SET_HISTORY'; name: string; messages: ChatMessage[]; force?: boolean }
@@ -237,7 +251,7 @@ export type StoreAction =
       ok?: boolean;
       summary?: string;
     }
-  | { type: 'SET_RECONNECTING'; value: boolean }
+  | { type: 'SET_RECONNECTING'; value: boolean; session?: string }
   | {
       type: 'WATCHDOG_REPORT';
       session: string;

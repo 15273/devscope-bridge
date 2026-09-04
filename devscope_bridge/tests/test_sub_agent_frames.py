@@ -251,12 +251,12 @@ async def test_task_tool_use_not_emitted_as_generic_agent_activity():
 
 
 # ─────────────────────────────────────────────
-# Test 6: Turn end clears in-flight state
+# Test 6: Successful turn end keeps in-flight Tasks
 # ─────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_turn_end_clears_in_flight_state():
-    """After a result event, in-flight sub-agent state is cleared for the session."""
+async def test_success_result_keeps_in_flight_sub_agents():
+    """Parent result does not wipe Task tracking — background agents still run."""
     q: asyncio.Queue = asyncio.Queue()
 
     await session_reader.dispatch_event(
@@ -265,17 +265,27 @@ async def test_turn_end_clears_in_flight_state():
         q,
         is_first_message=False,
     )
-
-    # Verify it's tracked
     assert sub_agent_tracker.has_in_flight("sess6")
 
-    # Turn ends without tool_result (abnormal — e.g. error turn)
     await session_reader.dispatch_event(
         "sess6", _result_event(), q, is_first_message=False
     )
+    assert sub_agent_tracker.has_in_flight("sess6")
 
-    # State must be cleared
-    assert not sub_agent_tracker.has_in_flight("sess6")
+
+@pytest.mark.asyncio
+async def test_error_result_clears_in_flight_sub_agents():
+    q: asyncio.Queue = asyncio.Queue()
+    await session_reader.dispatch_event(
+        "sess6-err",
+        _assistant_event([_task_tool_use_block(tool_id="toolu_006e")]),
+        q,
+        is_first_message=False,
+    )
+    await session_reader.dispatch_event(
+        "sess6-err", _result_event(is_error=True), q, is_first_message=False
+    )
+    assert not sub_agent_tracker.has_in_flight("sess6-err")
 
 
 # ─────────────────────────────────────────────

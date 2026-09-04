@@ -48,7 +48,9 @@
       "js": [
         "src/linkedin/linkedin-feed-scraper.ts",
         "src/linkedin/linkedin-composer.ts",
-        "src/linkedin/linkedin-comment.ts"
+        "src/linkedin/linkedin-comment.ts",
+        "src/linkedin/linkedin-notifications.ts",
+        "src/linkedin/linkedin-react.ts"
       ],
       "run_at": "document_idle"
     },

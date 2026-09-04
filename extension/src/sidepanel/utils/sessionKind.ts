@@ -1,4 +1,5 @@
 import type { Agent } from '@/shared/frames';
+import { agentFolderLabel as agentFolderLabelFromShared } from '@/shared/agents';
 
 /** How the session is used — user chat vs orchestrator agent. */
 export type SessionPurpose = 'chat' | 'worker' | 'manager' | 'orchestrator' | 'schedule_setup';
@@ -32,7 +33,7 @@ export function sessionKindLabel(kind: SessionKind): string {
 }
 
 export function agentFolderLabel(agent: Agent): string {
-  return agent === 'cursor' ? 'Cursor' : 'Claude';
+  return agentFolderLabelFromShared(agent);
 }
 
 export function purposeBadge(purpose: SessionPurpose): string | null {

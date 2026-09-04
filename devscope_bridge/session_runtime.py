@@ -108,8 +108,9 @@ def decrement_pending_prompts(name: str) -> None:
 
 
 def _session_agent(name: str) -> str:
+    from devscope_bridge.agents import parse_agent
     meta = session_store.get_metadata(name)
-    return meta["agent"] if meta else session_store.DEFAULT_AGENT
+    return parse_agent(meta["agent"] if meta else session_store.DEFAULT_AGENT)
 
 
 def _session_cwd(name: str) -> str:
@@ -145,4 +146,8 @@ def subscription_env(session_name: str | None = None) -> dict[str, str]:
         env.pop("ANTHROPIC_AUTH_TOKEN", None)
     if session_name:
         env["DEVSCOPE_SESSION"] = session_name
+        meta = session_store.get_metadata(session_name)
+        config_dir = (meta or {}).get("claude_config_dir")
+        if config_dir:
+            env["CLAUDE_CONFIG_DIR"] = str(config_dir)
     return env

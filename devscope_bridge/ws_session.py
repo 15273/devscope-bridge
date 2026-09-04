@@ -97,6 +97,16 @@ def resolve_out_queue(session_name: str) -> asyncio.Queue:
         return active.out_queue
     if session_manager._session_agent(session_name) == "cursor":
         return session_manager_cursor._cursor_out_queues.setdefault(session_name, asyncio.Queue())
+    from devscope_bridge import oneshot_runner
+    from devscope_bridge import codex_app_server
+    app_q = codex_app_server.get_out_queue(session_name)
+    if app_q is not None:
+        return app_q
+    oneshot_q = oneshot_runner.get_out_queue(session_name)
+    if oneshot_q is not None:
+        return oneshot_q
+    if session_manager._session_agent(session_name) in ("codex", "antigravity"):
+        return oneshot_runner.ensure_out_queue(session_name)
     return session_manager.get_or_create_out_queue(session_name)
 
 

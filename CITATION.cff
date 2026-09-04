@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+title: DevScope
+message: If you use this software, please cite it as below.
+type: software
+authors:
+  - name: DevScope contributors
+    website: https://github.com/15273/devscope-bridge
+repository-code: https://github.com/15273/devscope-bridge
+url: https://github.com/15273/devscope-bridge
+license: MIT
+version: 0.1.0
+date-released: "2026-08-17"

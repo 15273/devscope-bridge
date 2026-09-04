@@ -3,7 +3,7 @@ import { resolveSessionPurpose, sessionKindFor } from './sessionKind';
 import { groupSessionsForSidebar } from './sessionSidebarGroups';
 import type { SessionState } from '../store/sessionStore';
 
-function session(name: string, agent: 'claude' | 'cursor', purpose?: string): SessionState {
+function session(name: string, agent: import('@/shared/frames').Agent, purpose?: string): SessionState {
   return {
     name,
     agent,

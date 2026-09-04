@@ -5,21 +5,16 @@
  * present alongside the brand-colored dot.
  */
 import type { Agent } from '@/shared/frames';
-
-const LABEL: Record<Agent, string> = {
-  claude: 'claude',
-  cursor: 'cursor',
-};
+import { AGENT_DOT_CLASS, AGENT_LABELS } from '@/shared/agents';
 
 export function AgentBadge({ agent }: { agent: Agent }) {
-  const isCursor = agent === 'cursor';
   return (
     <span className="inline-flex items-center gap-1 font-mono text-2xs leading-none text-fg-muted">
       <span
-        className={`inline-block h-1.5 w-1.5 rounded-full ${isCursor ? 'bg-cursor' : 'bg-claude'}`}
+        className={`inline-block h-1.5 w-1.5 rounded-full ${AGENT_DOT_CLASS[agent]}`}
         aria-hidden
       />
-      {LABEL[agent]}
+      {AGENT_LABELS[agent].toLowerCase()}
     </span>
   );
 }

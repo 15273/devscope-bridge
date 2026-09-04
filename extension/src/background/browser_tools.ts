@@ -37,6 +37,7 @@ import {
   browserUploadFile,
 } from './browser_tools_act';
 
+import { notifyAgentAction } from './agent_action_feedback';
 import { listTabCatalog } from './tab_catalog';
 // Static import (NOT dynamic): in the MV3 service worker a dynamic import()
 // is wrapped by Vite's __vitePreload helper, which touches `document` and
@@ -337,6 +338,27 @@ export async function executeBrowserTool(
         full: args.full !== false,
         initialWait: Number(args.initial_wait ?? 2500),
       });
+    case 'linkedin_scrape_notifications':
+      return sendLinkedInTabMessage(effectiveTabId, {
+        type: 'LINKEDIN_SCRAPE_NOTIFICATIONS',
+        maxItems: Number(args.max_items ?? 30),
+      });
+    case 'linkedin_react': {
+      const reactResult = await sendLinkedInTabMessage(effectiveTabId, {
+        type: 'LINKEDIN_REACT',
+        reaction: String(args.reaction ?? 'like'),
+        postSelector: args.post_selector != null ? String(args.post_selector) : undefined,
+      });
+      if (reactResult.ok && effectiveTabId != null) {
+        void notifyAgentAction(
+          effectiveTabId,
+          args.post_selector != null ? String(args.post_selector) : undefined,
+          undefined,
+          'click',
+        );
+      }
+      return reactResult;
+    }
     case 'browser_wa_store': {
       // WhatsApp Web lives at a fixed URL — locate its tab directly.
       const waTabs = await chrome.tabs.query({ url: 'https://web.whatsapp.com/*' });

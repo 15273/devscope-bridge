@@ -640,7 +640,8 @@ function handleInboundMessage(msg: unknown): void {
     | RecorderStartMsg
     | RecorderStopMsg
     | { kind: 'speech_stt_start'; lang?: string }
-    | { kind: 'speech_stt_stop' };
+    | { kind: 'speech_stt_stop' }
+    | { kind: 'play_action_sound' };
   log('recv message:', m.kind, 'kind' in m ? (m as { sessionName?: string }).sessionName ?? '' : '');
 
   if (m.kind === 'set_token') {

@@ -57,7 +57,7 @@ async function getActiveTabIdInWindow(windowId: number): Promise<number | undefi
 }
 
 /** Restore whichever tab the user had active before a brief agent focus for capture. */
-async function restorePreviousActiveTab(windowId: number, previousActiveId: number | undefined, agentTabId: number): Promise<void> {
+async function restorePreviousActiveTab(previousActiveId: number | undefined, agentTabId: number): Promise<void> {
   if (!previousActiveId || previousActiveId === agentTabId) return;
   try {
     await chrome.tabs.update(previousActiveId, { active: true });
@@ -101,7 +101,7 @@ async function captureTabScreenshot(tab: { id: number; windowId: number; url?: s
     };
   } finally {
     if (needsFocus) {
-      await restorePreviousActiveTab(tab.windowId, previousActiveId, tab.id);
+      await restorePreviousActiveTab(previousActiveId, tab.id);
     }
   }
 }
@@ -173,7 +173,7 @@ export async function browserClick(
   if (route.driver === 'cdp' && resolved.tab.id) {
     const cdp = await cdpClickSelector(resolved.tab.id, sel);
     if (cdp.ok) {
-      void notifyAgentAction(resolved.tab.id, sel);
+      void notifyAgentAction(resolved.tab.id, sel, undefined, 'click');
       return cdp;
     }
   }
@@ -184,7 +184,7 @@ export async function browserClick(
     'ISOLATED',
     tabId,
   ).then(unwrapInjectedError);
-  if (result.ok && resolved.tab.id) void notifyAgentAction(resolved.tab.id, sel);
+  if (result.ok && resolved.tab.id) void notifyAgentAction(resolved.tab.id, sel, undefined, 'click');
   return result;
 }
 
@@ -208,7 +208,7 @@ export async function browserFill(
   if (route.driver === 'cdp' && resolved.tab.id) {
     const cdp = await cdpFillSelector(resolved.tab.id, sel, value);
     if (cdp.ok) {
-      void notifyAgentAction(resolved.tab.id, sel);
+      void notifyAgentAction(resolved.tab.id, sel, undefined, 'fill');
       return cdp;
     }
   }
@@ -224,7 +224,7 @@ export async function browserFill(
     },
     [sel, value], 'ISOLATED', tabId,
   ).then(unwrapInjectedError);
-  if (result.ok && resolved.tab.id) void notifyAgentAction(resolved.tab.id, sel);
+  if (result.ok && resolved.tab.id) void notifyAgentAction(resolved.tab.id, sel, undefined, 'fill');
   return result;
 }
 
@@ -253,12 +253,17 @@ export async function browserSelectOption(selector: string, value: string, tabId
 
 export async function browserHover(selector: string, tabId?: number): Promise<BrowserToolResult> {
   if (!selector) return { ok: false, error: 'selector is required' };
-  return runInFirstMatchingFrame(
+  const resolved = await resolveTab(tabId);
+  const result = await runInFirstMatchingFrame(
     injectedDomAction,
     ['hover', selector],
     'ISOLATED',
     tabId,
   ).then(unwrapInjectedError);
+  if (result.ok && !('error' in resolved) && resolved.tab.id) {
+    void notifyAgentAction(resolved.tab.id, selector, undefined, 'hover');
+  }
+  return result;
 }
 
 export async function browserKeyPress(key: string, selector?: string, tabId?: number): Promise<BrowserToolResult> {

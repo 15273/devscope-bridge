@@ -64,6 +64,8 @@ TOOL_NAMES = [
     "linkedin_scrape_people_search",
     "linkedin_read_search_state",
     "linkedin_scrape_profile",
+    "linkedin_scrape_notifications",
+    "linkedin_react",
 ]
 
 
@@ -514,6 +516,31 @@ async def linkedin_read_search_state(tab_id: int | None = None) -> dict[str, Any
         "linkedin_read_search_state",
         {**_tab_kwargs(tab_id)},
     )
+
+
+@mcp.tool()
+async def linkedin_scrape_notifications(
+    max_items: int = 30,
+    tab_id: int | None = None,
+) -> dict[str, Any]:
+    """Scrape visible LinkedIn notification cards (actor, text, href, time)."""
+    return await _forward_to_bridge(
+        "linkedin_scrape_notifications",
+        {"max_items": max_items, **_tab_kwargs(tab_id)},
+    )
+
+
+@mcp.tool()
+async def linkedin_react(
+    reaction: str = "like",
+    post_selector: str | None = None,
+    tab_id: int | None = None,
+) -> dict[str, Any]:
+    """React on a visible LinkedIn feed card. Currently only reaction=like."""
+    payload: dict[str, Any] = {"reaction": reaction, **_tab_kwargs(tab_id)}
+    if post_selector:
+        payload["post_selector"] = post_selector
+    return await _forward_to_bridge("linkedin_react", payload)
 
 
 @mcp.tool()

@@ -24,7 +24,12 @@ export function reduceLifecycle(state: StoreState, action: StoreAction): StoreSt
               cwd: info.cwd ?? existing.cwd,
               model: info.model ?? existing.model ?? null,
               purpose: info.purpose ?? existing.purpose,
-              turnRunning: info.turn_running ?? false,
+              displayTitle: info.display_title ?? existing.displayTitle,
+              origin: info.origin ?? existing.origin,
+              // Older bridges omit these fields. Absence means "unknown", not
+              // false/null: keep live UI state until an authoritative value arrives.
+              turnRunning: info.turn_running ?? existing.turnRunning,
+              claude_agent: info.claude_agent ?? existing.claude_agent,
             }
           : {
               name,
@@ -33,6 +38,9 @@ export function reduceLifecycle(state: StoreState, action: StoreAction): StoreSt
               purpose: info.purpose ?? 'chat',
               model: info.model ?? null,
               lastUsed: info.last_used,
+              displayTitle: info.display_title ?? null,
+              origin: info.origin ?? null,
+              claude_agent: info.claude_agent ?? null,
               messages: [],
               isConnected: false,
               isLoadingHistory: true,
@@ -67,6 +75,10 @@ export function reduceLifecycle(state: StoreState, action: StoreAction): StoreSt
         agent: action.agent,
         cwd: action.cwd,
         purpose: action.purpose ?? 'chat',
+        displayTitle: action.displayTitle ?? null,
+        origin: action.origin ?? null,
+        model: action.model ?? null,
+        claude_agent: action.claudeAgent ?? null,
         lastUsed: new Date().toISOString(),
         messages: [],
         isConnected: false,
@@ -217,6 +229,9 @@ export function reduceLifecycle(state: StoreState, action: StoreAction): StoreSt
       }));
 
     case 'SET_RECONNECTING':
+      // Socket status is emitted for every kept-alive worker. A background
+      // session must not clear or enable the active chat's reconnect banner.
+      if (action.session && action.session !== state.activeSession) return state;
       return { ...state, reconnecting: action.value };
 
     case 'SET_SESSION_MODEL':

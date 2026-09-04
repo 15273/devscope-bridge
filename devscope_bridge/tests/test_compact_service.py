@@ -364,7 +364,10 @@ async def test_apply_compact_reset_clears_claude_session(monkeypatch):
     cleared = []
     killed = []
     monkeypatch.setattr(cs.session_store, "clear_session_id", lambda n: cleared.append(n))
-    monkeypatch.setattr(cs.session_manager, "kill_session", AsyncMock(side_effect=lambda n: killed.append(n)))
+    monkeypatch.setattr(
+        cs.session_manager, "kill_session",
+        AsyncMock(side_effect=lambda n, **_k: killed.append(n)),
+    )
     monkeypatch.setattr(cs.session_reader, "reset_session_usage", lambda n: None)
     monkeypatch.setattr(cs.session_store, "get_session", lambda n: {"agent": "claude"})
     monkeypatch.setattr(cs.session_store, "reset_bridge_transcript", lambda n, seed_turns=None: None)

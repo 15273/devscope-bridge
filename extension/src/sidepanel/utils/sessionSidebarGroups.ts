@@ -4,7 +4,7 @@ import { sessionKindFor, sessionKindLabel, type SessionKind } from './sessionKin
 
 export const NO_PROJECT = '^@no-project';
 
-const AGENT_ORDER: Agent[] = ['claude', 'cursor'];
+const AGENT_ORDER: Agent[] = ['claude', 'cursor', 'codex', 'antigravity'];
 
 export interface AgentBucket {
   agent: Agent;

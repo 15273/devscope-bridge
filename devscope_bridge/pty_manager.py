@@ -172,18 +172,36 @@ def ingest_pty_output(terminal_id: str, chunk: str) -> None:
             return
 
 
-def _reader_loop(term_id: str, master_fd: int, loop: asyncio.AbstractEventLoop, q: asyncio.Queue) -> None:
+def _reader_loop(
+    term_id: str,
+    master_fd: int,
+    loop: asyncio.AbstractEventLoop,
+    q: asyncio.Queue,
+    ready: threading.Event | None = None,
+) -> None:
     """Thread: blockingly read the master fd, hand bytes to the event loop."""
+    if ready is not None:
+        ready.set()
+
+    def enqueue(item: str | None) -> bool:
+        try:
+            loop.call_soon_threadsafe(q.put_nowait, item)
+            return True
+        except RuntimeError:
+            # The owning websocket/test loop may close before the PTY reader.
+            return False
+
     while True:
         try:
             data = os.read(master_fd, _READ_CHUNK)
         except OSError:
             data = b""
         if not data:
-            loop.call_soon_threadsafe(q.put_nowait, None)
+            enqueue(None)
             return
         text = data.decode("utf-8", errors="replace")
-        loop.call_soon_threadsafe(q.put_nowait, text)
+        if not enqueue(text):
+            return
 
 
 def resolve_terminal_params(
@@ -236,14 +254,21 @@ async def open_terminal(
         cwd=cwd, env=_pty_env(session_name), start_new_session=True,
         close_fds=True,
     )
-    os.close(slave_fd)
 
     q: asyncio.Queue = asyncio.Queue()
     loop = asyncio.get_running_loop()
+    reader_ready = threading.Event()
     reader = threading.Thread(
-        target=_reader_loop, args=(terminal_id, master_fd, loop, q), daemon=True,
+        target=_reader_loop,
+        args=(terminal_id, master_fd, loop, q, reader_ready),
+        daemon=True,
     )
     reader.start()
+    # Keep one slave descriptor alive until the reader is waiting on the
+    # master. Otherwise very short commands can exit before the thread starts
+    # and macOS reports EIO without exposing their buffered output.
+    reader_ready.wait(timeout=1.0)
+    os.close(slave_fd)
 
     known_sid = _pty_uuid_by_terminal.get(terminal_id)
     if not known_sid and session_name:

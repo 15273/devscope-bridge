@@ -37,6 +37,8 @@ import {
   fetchPendingRequests,
   requestSessionCompact,
   syncBridgeHistory,
+  importClaudeSessionOnBridge,
+  importLocalSessionOnBridge,
 } from '../bridge';
 import { collectWsKeepOpen } from '@/shared/wsKeepalive';
 import { streamDebug } from '../utils/streamDebug';
@@ -345,7 +347,7 @@ export function useSessionManager() {
         ) {
           streamDebug('ui', activeName, 'FORCE_TURN_IDLE (bridge idle, UI stuck)');
           dispatch({ type: 'FORCE_TURN_IDLE', session: activeName });
-          dispatch({ type: 'SET_RECONNECTING', value: false });
+          dispatch({ type: 'SET_RECONNECTING', value: false, session: activeName });
         }
       }
       for (const name of syncTargets) {
@@ -448,7 +450,7 @@ export function useSessionManager() {
             startedAgoMs: startedAgo,
           });
           dispatch({ type: 'FORCE_TURN_IDLE', session: active });
-          dispatch({ type: 'SET_RECONNECTING', value: false });
+          dispatch({ type: 'SET_RECONNECTING', value: false, session: active });
         }
         const needy =
           hasEmptyStreamingAssistant(session) ||
@@ -531,7 +533,7 @@ export function useSessionManager() {
       loadSessionHistory(name)
         .then((messages) => {
           dispatch({ type: 'SET_HISTORY', name, messages });
-          if (agent === 'cursor') {
+          if (agent === 'cursor' || agent === 'codex' || agent === 'antigravity') {
             void syncBridgeHistory(name, messagesToBridgeTurns(messages));
           }
         })
@@ -575,9 +577,9 @@ export function useSessionManager() {
           reconnectAttempt: (m as { reconnectAttempt?: number }).reconnectAttempt,
         });
         if (m.connected) {
-          dispatch({ type: 'SET_RECONNECTING', value: false });
+          dispatch({ type: 'SET_RECONNECTING', value: false, session: m.sessionName });
         } else if ((m as { reconnectAttempt?: number }).reconnectAttempt) {
-          dispatch({ type: 'SET_RECONNECTING', value: true });
+          dispatch({ type: 'SET_RECONNECTING', value: true, session: m.sessionName });
         }
         return;
       }
@@ -933,7 +935,7 @@ export function useSessionManager() {
   }, []);
 
   const reconnectSession = useCallback(async (name: string) => {
-    dispatch({ type: 'SET_RECONNECTING', value: true });
+    dispatch({ type: 'SET_RECONNECTING', value: true, session: name });
     try {
       await wakeOffscreen();
       await chrome.runtime.sendMessage({ kind: 'reset_session_ws', sessionName: name });
@@ -941,7 +943,7 @@ export function useSessionManager() {
     } catch {
       /* non-fatal — UI still shows offline until status frame arrives */
     } finally {
-      dispatch({ type: 'SET_RECONNECTING', value: false });
+      dispatch({ type: 'SET_RECONNECTING', value: false, session: name });
     }
     switchSession(name);
   }, [switchSession]);
@@ -1203,7 +1205,7 @@ export function useSessionManager() {
 
   const createSession = useCallback(async (payload: CreateSessionPayload): Promise<void> => {
     const token = await getToken();
-    const res = await fetch(`${BRIDGE_HTTP}/sessions`, {
+    const res = await bridgeFetch(`${BRIDGE_HTTP}/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
       body: JSON.stringify(payload),
@@ -1218,16 +1220,42 @@ export function useSessionManager() {
       agent: payload.agent,
       cwd: payload.cwd,
       purpose: payload.purpose ?? 'chat',
+      model: payload.model ?? null,
+      claudeAgent: payload.claude_agent ?? null,
     });
     await wakeOffscreen().catch(() => {});
   }, []);
 
+  const importClaudeSession = useCallback(async (sessionId: string, source: string): Promise<string> => {
+    const isClaude = source === 'claude_code' || source === 'desktop_code' || source === 'desktop_local';
+    const info = isClaude
+      ? await importClaudeSessionOnBridge(sessionId, source)
+      : await importLocalSessionOnBridge(sessionId, source);
+    const name = info.name;
+    if (!name) throw new Error('Import did not return a session name');
+    dispatch({
+      type: 'ADD_SESSION',
+      name,
+      agent: info.agent ?? 'claude',
+      cwd: info.cwd ?? '',
+      purpose: info.purpose ?? 'chat',
+      displayTitle: info.display_title ?? null,
+      origin: info.origin ?? null,
+    });
+    await wakeOffscreen().catch(() => {});
+    return name;
+  }, []);
+
   const deleteSession = useCallback(async (name: string): Promise<void> => {
     const token = await getToken();
-    await fetch(`${BRIDGE_HTTP}/sessions/${encodeURIComponent(name)}`, {
+    const res = await bridgeFetch(`${BRIDGE_HTTP}/sessions/${encodeURIComponent(name)}`, {
       method: 'DELETE',
       headers: authHeaders(token),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { detail?: string };
+      throw new Error(body.detail ?? `Failed to delete session (HTTP ${res.status})`);
+    }
     dispatch({ type: 'REMOVE_SESSION', name });
     chrome.runtime.sendMessage({ kind: 'close_session_ws', sessionName: name }).catch(() => {});
     await clearHistory(name);
@@ -1332,6 +1360,7 @@ export function useSessionManager() {
     retryMessage,
     cancelSteering,
     createSession,
+    importClaudeSession,
     deleteSession,
     interrupt,
     resetSession,

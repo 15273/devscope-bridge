@@ -206,6 +206,22 @@ async def _run_auto_compact(session_name: str, reason: str, q) -> None:
             "chat hygiene: auto-compact skipped for '%s' (%s)", session_name, result.skipped,
         )
         return
+    # Summarize can take minutes. Re-check before the destructive reset so a
+    # new turn or background Task started during the wait is not killed.
+    if _is_mid_work(session_name):
+        logger.info(
+            "chat hygiene: auto-compact aborted before reset for '%s' — work resumed during summarize",
+            session_name,
+        )
+        _last_auto_compact_at.pop(session_name, None)
+        await q.put(SlashCommandCard(
+            session=session_name,
+            kind="compact",
+            title="Compact deferred",
+            body="Work is still running (turn or sub-agents). Nothing was reset — will retry when idle.",
+            data={"status": "deferred", "auto": True},
+        ))
+        return
     await compact_service.apply_compact_reset(session_name, result.preamble, result.was_real_summary)
 
     await q.put(SlashCommandCard(

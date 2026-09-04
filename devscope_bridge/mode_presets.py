@@ -27,6 +27,8 @@ class ModePreset(TypedDict):
     # Extra args to append to the claude / cursor argv list.
     claude_args: list[str]
     cursor_args: list[str]
+    codex_sandbox: str
+    agy_extra_args: list[str]
     # Text appended via --append-system-prompt (empty string → omit flag).
     system_prompt_suffix: str
 
@@ -45,6 +47,8 @@ MODE_PRESETS: dict[str, ModePreset] = {
         # from plan/inspect back to act restores it correctly.
         claude_args=["--permission-mode", "bypassPermissions"],
         cursor_args=[],
+        codex_sandbox="workspace-write",
+        agy_extra_args=[],
         system_prompt_suffix=(
             "Proceed autonomously on implementation (run tools, edit files) without "
             "asking for confirmation on each step. When the user must pick between "
@@ -55,6 +59,8 @@ MODE_PRESETS: dict[str, ModePreset] = {
     "plan": ModePreset(
         claude_args=["--permission-mode", "plan"],
         cursor_args=["--mode", "plan"],
+        codex_sandbox="workspace-write",
+        agy_extra_args=[],
         system_prompt_suffix=(
             "Produce a numbered plan and STOP. "
             "Do not edit files or run tools until the user explicitly says to proceed."
@@ -80,6 +86,8 @@ MODE_PRESETS: dict[str, ModePreset] = {
             ),
         ],
         cursor_args=["--mode", "ask"],
+        codex_sandbox="read-only",
+        agy_extra_args=[],
         system_prompt_suffix=(
             "You are in Inspect mode: read-only exploration only. "
             "Never edit files. For the live page use read-only browser MCP tools only "
@@ -91,6 +99,8 @@ MODE_PRESETS: dict[str, ModePreset] = {
         # Test mode walks the live app, so it needs the full browser tool set.
         claude_args=["--permission-mode", "bypassPermissions"],
         cursor_args=[],
+        codex_sandbox="workspace-write",
+        agy_extra_args=[],
         system_prompt_suffix=(
             "You are in Test mode. Walk the live app: fill forms, click buttons, "
             "verify user flows. Write a structured test report (pass/fail per step), "

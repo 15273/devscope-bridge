@@ -1,5 +1,5 @@
 /**
- * ModelPill — pick the Claude CLI model for the current session (Claude agent only).
+ * ModelPill — pick the CLI model for the current session.
  */
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Cpu } from 'lucide-react';
@@ -10,6 +10,8 @@ import {
   claudeModelPreset,
   type ClaudeModelGroup,
 } from '@/shared/claudeModels';
+import { CODEX_MODEL_PRESETS, codexModelPreset } from '@/shared/codexModels';
+import { ANTIGRAVITY_MODEL_PRESETS, antigravityModelPreset } from '@/shared/antigravityModels';
 import { AnchorPopover } from './AnchorPopover';
 
 const POPOVER_CLASS =
@@ -29,8 +31,27 @@ export function ModelPill({
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
-  const active = claudeModelPreset(modelId);
+  const active =
+    agent === 'codex'
+      ? codexModelPreset(modelId)
+      : agent === 'antigravity'
+        ? antigravityModelPreset(modelId)
+        : claudeModelPreset(modelId);
   const isDefault = !modelId;
+  const presets =
+    agent === 'codex'
+      ? CODEX_MODEL_PRESETS
+      : agent === 'antigravity'
+        ? ANTIGRAVITY_MODEL_PRESETS
+        : CLAUDE_MODEL_PRESETS;
+  const hint =
+    agent === 'cursor'
+      ? 'cursor-agent --model — applies on the next message.'
+      : agent === 'codex'
+        ? 'codex exec -m — applies on the next message.'
+        : agent === 'antigravity'
+          ? 'agy --model — applies on the next message.'
+          : 'Same list as Claude Code /model — applies on the next message.';
 
   useEffect(() => {
     if (!open) return;
@@ -70,13 +91,11 @@ export function ModelPill({
         className={POPOVER_CLASS}
       >
         <p className="border-b border-line px-2.5 py-1.5 text-2xs text-fg-subtle">
-          {agent === 'cursor'
-            ? 'cursor-agent --model — applies on the next message.'
-            : 'Same list as Claude Code /model — applies on the next message.'}
+          {hint}
         </p>
         <div className="max-h-[min(22rem,50vh)] overflow-y-auto">
           {GROUP_ORDER.map((group) => {
-            const items = CLAUDE_MODEL_PRESETS.filter((m) => m.group === group);
+            const items = presets.filter((m) => (m.group as string) === group);
             if (items.length === 0) return null;
             return (
               <div key={group}>

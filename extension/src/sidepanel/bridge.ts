@@ -313,6 +313,80 @@ export interface TranscriptResult {
  * `ok: false` distinguishes bridge failure from a genuinely empty transcript —
  * callers must surface failures (connection banner), never treat them as "no news".
  */
+export async function discoverClaudeSessions(): Promise<
+  import('@/shared/frames').DiscoveredClaudeSession[]
+> {
+  const token = await getToken();
+  const res = await bridgeFetch(`${BRIDGE_HTTP}/claude-sessions/discover`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  const body = (await res.json()) as { items?: import('@/shared/frames').DiscoveredClaudeSession[] };
+  return body.items ?? [];
+}
+
+export async function importClaudeSessionOnBridge(
+  sessionId: string,
+  source: string,
+): Promise<import('@/shared/frames').SessionInfo> {
+  const token = await getToken();
+  const res = await bridgeFetch(`${BRIDGE_HTTP}/claude-sessions/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify({ session_id: sessionId, source }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(body.detail ?? `HTTP ${res.status}`);
+  }
+  return (await res.json()) as import('@/shared/frames').SessionInfo;
+}
+
+export async function discoverLocalSessions(
+  vendor: 'claude' | 'codex' | 'antigravity',
+): Promise<import('@/shared/frames').DiscoveredLocalSession[]> {
+  const token = await getToken();
+  const path =
+    vendor === 'codex'
+      ? '/codex-sessions/discover'
+      : vendor === 'antigravity'
+        ? '/antigravity-sessions/discover'
+        : '/claude-sessions/discover';
+  const res = await bridgeFetch(`${BRIDGE_HTTP}${path}`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status}`);
+  }
+  const body = (await res.json()) as { items?: import('@/shared/frames').DiscoveredLocalSession[] };
+  return body.items ?? [];
+}
+
+export async function importLocalSessionOnBridge(
+  sessionId: string,
+  source: string,
+): Promise<import('@/shared/frames').SessionInfo> {
+  const token = await getToken();
+  const path =
+    source === 'codex'
+      ? '/codex-sessions/import'
+      : source === 'antigravity_cli' || source === 'antigravity_ide'
+        ? '/antigravity-sessions/import'
+        : '/claude-sessions/import';
+  const res = await bridgeFetch(`${BRIDGE_HTTP}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify({ session_id: sessionId, source }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(body.detail ?? `HTTP ${res.status}`);
+  }
+  return (await res.json()) as import('@/shared/frames').SessionInfo;
+}
+
 export async function fetchTranscript(name: string): Promise<TranscriptResult> {
   try {
     const token = await getToken();
@@ -571,6 +645,16 @@ export interface TaskBoardSnapshot {
   schedules?: ScheduleEntry[];
 }
 
+export interface LinkedInWatchState {
+  allow_auto_engage?: boolean;
+  like_new?: boolean;
+  like_keywords?: string[];
+  comment_keywords?: string[];
+  comment_style?: string;
+  seen_urns?: string[];
+  seen_notification_ids?: string[];
+}
+
 export interface SchedulePlaybook {
   version?: number;
   site?: string;
@@ -582,6 +666,7 @@ export interface SchedulePlaybook {
   checklist?: string[];
   last_success_at?: string | null;
   learned_from_runs?: number;
+  watch?: LinkedInWatchState;
 }
 
 export interface ScheduleTemplate {
@@ -591,7 +676,7 @@ export interface ScheduleTemplate {
   domain?: string | null;
   instruction?: string | null;
   autonomy?: string | null;
-  agent?: 'claude' | 'cursor';
+  agent?: import('@/shared/frames').Agent;
   mode?: 'act' | 'plan' | 'inspect' | 'test';
   recurrence?: { every_minutes?: number; daily_at?: string };
 }
