@@ -1,16 +1,30 @@
+<p align="center">
+  <img src="docs/images/devscope-mark.png" width="96" alt="DevScope">
+</p>
+
 # DevScope
 
 [![CI](https://github.com/15273/devscope-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/15273/devscope-bridge/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/15273/devscope-bridge?style=social)](https://github.com/15273/devscope-bridge/stargazers)
 
-Local Chrome side-panel for **Claude Code**, **Cursor**, **Codex**, and
-**Antigravity** sessions.
+**Your coding agents, in Chrome, on your machine.** Side panel for
+**Claude Code**, **Cursor**, **Codex**, and **Antigravity** — chat, bind a
+tab, and let the agent click. Loopback only. There is no DevScope cloud.
+
+<p align="center">
+  <img src="docs/images/devscope-og.png" alt="DevScope — local Chrome side-panel for Claude, Cursor, and Codex">
+</p>
 
 Three pieces:
 
 1. **Chat** — sessions in the side panel, streamed from your local CLI
 2. **Browser** — bind a tab; Claude can read and click through MCP
 3. **Connection** — a loopback-only Python bridge on `127.0.0.1:7878`
+
+<p align="center">
+  <img src="docs/images/devscope-architecture.png" alt="Chrome side panel talks to a loopback bridge on 127.0.0.1:7878, which drives local CLIs">
+</p>
 
 The bridge launches your already-installed CLI/IDE adapters (`claude`,
 `cursor-agent`, `codex`, or Antigravity headless mode). Nothing is sent to a
