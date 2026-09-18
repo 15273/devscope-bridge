@@ -10,9 +10,6 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 keywords = ["devscope", "chrome-extension", "claude", "bridge"]
-classifiers = [
-    "License :: OSI Approved :: MIT License",
-]
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",

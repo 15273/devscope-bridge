@@ -15,15 +15,12 @@ straight to the master fd.
 """
 
 import asyncio
-import fcntl
 import json
 import logging
 import os
-import pty
 import re
 import signal
 import struct
-import termios
 import threading
 import time
 from dataclasses import dataclass, field
@@ -31,6 +28,19 @@ from dataclasses import dataclass, field
 from devscope_bridge import session_manager, session_store
 
 logger = logging.getLogger(__name__)
+
+try:
+    # Unix-only: pseudo-terminals aren't available on Windows. Import
+    # failure is handled at call time in open_terminal() so the rest of
+    # the bridge (chat, MCP tools) still works without a real PTY.
+    import fcntl
+    import pty
+    import termios
+
+    PTY_SUPPORTED = True
+except ImportError:
+    fcntl = pty = termios = None  # type: ignore[assignment]
+    PTY_SUPPORTED = False
 
 
 class PtyConflictError(RuntimeError):
@@ -223,6 +233,11 @@ async def open_terminal(
     rows: int = _FALLBACK_ROWS,
 ) -> _Terminal:
     """Spawn `cmd` under a fresh PTY with the client's winsize."""
+    if not PTY_SUPPORTED:
+        raise RuntimeError(
+            "Interactive PTY terminals need fcntl/pty/termios and aren't "
+            "supported on Windows. Chat and browser tools are unaffected."
+        )
     cmd, session_name = resolve_terminal_params(terminal_id, cmd, session_name)
     existing = _terminals.get(terminal_id)
     if existing is not None and not existing.closed:
