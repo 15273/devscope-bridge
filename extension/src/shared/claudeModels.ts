@@ -1,6 +1,8 @@
 /**
  * Claude CLI model ids and aliases for the DevScope model picker.
- * Mirrors Claude Code `/model` tiers; aliases (opus, fable, …) are valid --model values.
+ * Mirrors Claude Code `/model` tiers; aliases (opus, sonnet, haiku, …) are the
+ * preferred `--model` values so the picker stays current as Anthropic ships
+ * new point releases. Labels show the currently resolved generation.
  */
 export type ClaudeModelGroup = 'recommended' | 'aliases' | 'previous';
 
@@ -11,6 +13,17 @@ export interface ClaudeModelPreset {
   group: ClaudeModelGroup;
 }
 
+/**
+ * Resolved ids observed from `claude -p --model <alias> --output-format json`
+ * / stream-json `modelUsage` (Nov 2026). Labels only — picker values stay as
+ * aliases so they track the CLI's latest.
+ */
+export const CLAUDE_ALIAS_RESOLVED = {
+  opus: 'claude-opus-5-5',
+  sonnet: 'claude-sonnet-5-5',
+  haiku: 'claude-haiku-5-5',
+} as const;
+
 export const CLAUDE_MODEL_PRESETS: ClaudeModelPreset[] = [
   {
     id: null,
@@ -19,27 +32,21 @@ export const CLAUDE_MODEL_PRESETS: ClaudeModelPreset[] = [
     group: 'recommended',
   },
   {
-    id: 'claude-opus-4-8',
-    label: 'Opus 4.8',
-    summary: 'Best for everyday complex tasks · 1M context window.',
+    id: 'opus',
+    label: 'Opus 5.5',
+    summary: 'Alias `opus` → currently claude-opus-5-5 · everyday complex tasks.',
     group: 'recommended',
   },
   {
-    id: 'claude-fable-5',
-    label: 'Fable 5',
-    summary: 'Most capable for hardest, longest-running agent work · uses limits faster.',
+    id: 'sonnet',
+    label: 'Sonnet 5.5',
+    summary: 'Alias `sonnet` → currently claude-sonnet-5-5 · routine coding.',
     group: 'recommended',
   },
   {
-    id: 'claude-sonnet-4-6',
-    label: 'Sonnet 4.6',
-    summary: 'Efficient for routine coding and daily tasks.',
-    group: 'recommended',
-  },
-  {
-    id: 'claude-haiku-4-5',
-    label: 'Haiku 4.5',
-    summary: 'Fastest for quick answers and lightweight edits.',
+    id: 'haiku',
+    label: 'Haiku 5.5',
+    summary: 'Alias `haiku` → currently claude-haiku-5-5 · fastest answers.',
     group: 'recommended',
   },
   {
@@ -55,21 +62,9 @@ export const CLAUDE_MODEL_PRESETS: ClaudeModelPreset[] = [
     group: 'aliases',
   },
   {
-    id: 'opus',
-    label: 'opus',
-    summary: 'Alias — latest Opus (4.8 on Anthropic API).',
-    group: 'aliases',
-  },
-  {
     id: 'opus[1m]',
     label: 'opus[1m]',
     summary: 'Alias — Opus with explicit 1M token context.',
-    group: 'aliases',
-  },
-  {
-    id: 'sonnet',
-    label: 'sonnet',
-    summary: 'Alias — latest Sonnet model.',
     group: 'aliases',
   },
   {
@@ -79,16 +74,35 @@ export const CLAUDE_MODEL_PRESETS: ClaudeModelPreset[] = [
     group: 'aliases',
   },
   {
-    id: 'haiku',
-    label: 'haiku',
-    summary: 'Alias — fast Haiku tier.',
-    group: 'aliases',
-  },
-  {
     id: 'opusplan',
     label: 'opusplan',
     summary: 'Alias — Opus in plan mode, Sonnet for execution.',
     group: 'aliases',
+  },
+  // Full ids so turn_result / imported sessions still resolve a friendly label.
+  {
+    id: 'claude-opus-5-5',
+    label: 'Opus 5.5',
+    summary: 'Pinned full id for current Opus (prefer alias `opus`).',
+    group: 'previous',
+  },
+  {
+    id: 'claude-sonnet-5-5',
+    label: 'Sonnet 5.5',
+    summary: 'Pinned full id for current Sonnet (prefer alias `sonnet`).',
+    group: 'previous',
+  },
+  {
+    id: 'claude-haiku-5-5',
+    label: 'Haiku 5.5',
+    summary: 'Pinned full id for current Haiku (prefer alias `haiku`).',
+    group: 'previous',
+  },
+  {
+    id: 'claude-opus-4-8',
+    label: 'Opus 4.8',
+    summary: 'Previous Opus generation.',
+    group: 'previous',
   },
   {
     id: 'claude-opus-4-7',
@@ -109,9 +123,27 @@ export const CLAUDE_MODEL_PRESETS: ClaudeModelPreset[] = [
     group: 'previous',
   },
   {
+    id: 'claude-sonnet-4-6',
+    label: 'Sonnet 4.6',
+    summary: 'Previous Sonnet generation.',
+    group: 'previous',
+  },
+  {
     id: 'claude-sonnet-4-5',
     label: 'Sonnet 4.5',
     summary: 'Previous Sonnet generation.',
+    group: 'previous',
+  },
+  {
+    id: 'claude-haiku-4-5',
+    label: 'Haiku 4.5',
+    summary: 'Previous Haiku generation.',
+    group: 'previous',
+  },
+  {
+    id: 'claude-fable-5',
+    label: 'Fable 5',
+    summary: 'Pinned Fable id when available on your provider.',
     group: 'previous',
   },
 ];
