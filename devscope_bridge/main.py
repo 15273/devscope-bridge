@@ -83,7 +83,7 @@ async def lifespan(app: FastAPI):
         logger.info("Repaired duplicate session_ids: %s", cleared)
     from devscope_bridge import orchestrator
     from devscope_bridge.session_runner import BridgeSessionRunner
-    if os.environ.get("ORCHESTRATOR_ENABLED", "1") == "1":
+    if os.environ.get("ORCHESTRATOR_ENABLED", "0") == "1":
         orchestrator.start_loop(BridgeSessionRunner())
         logger.info("orchestrator loop enabled")
     from devscope_bridge import session_hygiene

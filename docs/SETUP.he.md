@@ -158,7 +158,7 @@ python -m devscope_bridge.setup_mcp
 claude mcp list
 ```
 
-חשוב: ה־`python3` שב־`.mcp.json` חייב להיות אותו פייתון שבו מותקן `devscope_bridge` (לכן `source .venv/bin/activate`). אם לא — שנה ב־`.mcp.json` את `command` ל־`/path/to/devscope/.venv/bin/python`.
+`.mcp.json` מצביע על `.venv/bin/python` (יחסית לשורש הריפו). אחרי `python3 -m venv .venv && pip install -e .` זה עובד גם ב־macOS וגם ב־Linux. `setup_mcp` ממיר את הנתיב למוחלט. אם מעתיקים את `.mcp.json` לפרויקט אחר — שימו נתיב מוחלט ל־`.venv/bin/python` של הריפו הזה.
 
 OAuth אופציונלי:
 

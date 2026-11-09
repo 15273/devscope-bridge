@@ -151,6 +151,7 @@ curl http://127.0.0.1:7878/health
 | `BRIDGE_PORT` | `7878` | TCP port |
 | `BRIDGE_EXTENSION_ID` | placeholder | Chrome origin added to CORS, e.g. `chrome-extension://abcdef…` |
 | `CURSOR_BIN` | macOS Cursor.app path | Cursor CLI binary |
+| `ORCHESTRATOR_ENABLED` | `0` | Set to `1` to start the autonomy tick loop |
 
 Copy `.env.example` → `devscope_bridge/.env.local` if you prefer a file (gitignored).
 
@@ -242,8 +243,17 @@ If you rebuild the Python package, kickstart:
 launchctl kickstart -k "gui/$(id -u)/com.devscope.bridge"
 ```
 
-On Linux, run `devscope-bridge` under systemd/user or a tmux session. There is
-no Linux unit in this snapshot.
+On Linux, install a user unit the same way (example unit in
+`scripts/devscope-bridge.service`):
+
+```bash
+chmod +x scripts/install-linux-service.sh
+./scripts/install-linux-service.sh
+# logs: journalctl --user -u devscope-bridge -f
+# stop: systemctl --user stop devscope-bridge
+```
+
+Or run under tmux if you prefer not to use systemd.
 
 ---
 
@@ -266,9 +276,12 @@ python -m devscope_bridge.setup_mcp
 claude mcp list
 ```
 
-Use the **same** Python that has `devscope_bridge` installed. If `.mcp.json`
-says `python3 -m devscope_bridge.…`, that `python3` must resolve to the venv
-(activate it, or edit `.mcp.json` to `.venv/bin/python`).
+`.mcp.json` uses `.venv/bin/python` (relative to the repo root) so MCP
+servers load the editable install on both macOS and Linux after
+`python3 -m venv .venv && pip install -e .`. `setup_mcp` resolves that path
+to an absolute one when registering with the Claude CLI. If you copy
+`.mcp.json` into another project, point `command` at this repo's
+`.venv/bin/python` (absolute path).
 
 Bind a tab with the globe control in the composer. Without a bound tab,
 browser tools return `503`.
@@ -289,7 +302,9 @@ a fresh install behaves exactly like a side panel with a chat in it.
 | Autonomous employee | Board sync (Notion) and reporting over panel / WhatsApp / email | `~/.dev-bridge/employee_config.json` |
 | Cockpits | WhatsApp, Gmail, Calendar, Meta Ads — read/act through MCP | OAuth tokens in `~/.dev-bridge/` |
 
-Turn the orchestrator on and it starts waking agents on its own. Read
+Turn the orchestrator on with `ORCHESTRATOR_ENABLED=1` (or via
+`~/.dev-bridge/orchestrator_config.json`) and it starts waking agents on its
+own. Read
 [`agent_policies.py`](devscope_bridge/agent_policies.py) first — it is the
 document that defines what an unattended worker may and may not do without
 asking you. `WORKER_SAFETY_POLICY` is the default; the `_E2E` variant relaxes
@@ -297,6 +312,17 @@ sending and posting and is a deliberate choice, not a default.
 
 OAuth tokens (if you use the cockpits) land in `~/.dev-bridge/` and must
 never be committed.
+
+---
+
+## Testing
+
+```bash
+source .venv/bin/activate
+pip install -e ".[dev]"    # pytest + pytest-asyncio
+pytest
+cd extension && npm ci && npm run lint && npm test
+```
 
 ---
 
@@ -313,7 +339,7 @@ devscope_bridge/     Python package (FastAPI bridge + MCP stdio servers)
   agent_policies.py  System prompts and the worker approval policy
   task_store.py      Persistent task board
 extension/           Chrome MV3 side panel (Vite)
-scripts/             macOS LaunchAgent installer
+scripts/             macOS LaunchAgent + Linux systemd --user installers
 .mcp.json            Claude Code MCP (this repo)
 ```
 

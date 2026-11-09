@@ -142,6 +142,19 @@ launchctl kickstart -k "gui/$(id -u)/com.devscope.bridge"
 If `/health` doesn't answer after a few seconds — read the log. Never run
 `uvicorn --workers 2`. One process only.
 
+### Linux (systemd --user)
+
+```bash
+cd /path/to/devscope
+chmod +x scripts/install-linux-service.sh
+./scripts/install-linux-service.sh
+journalctl --user -u devscope-bridge -f
+```
+
+The unit template lives at `scripts/devscope-bridge.service`. It uses the
+repo `.venv` the same way the macOS LaunchAgent does.
+
+
 ---
 
 ## Step 5 — MCP tools (browser / WhatsApp / Gmail)
@@ -163,9 +176,11 @@ python -m devscope_bridge.setup_mcp
 claude mcp list
 ```
 
-Important: the `python3` referenced in `.mcp.json` must be the same Python that
-has `devscope_bridge` installed (hence `source .venv/bin/activate`). If it
-isn't — change `command` in `.mcp.json` to `/path/to/devscope/.venv/bin/python`.
+`.mcp.json` already points at `.venv/bin/python` (relative to the repo root),
+so create the venv and `pip install -e .` before opening a chat that loads it.
+`python -m devscope_bridge.setup_mcp` resolves that relative path to an absolute
+one. If you copy `.mcp.json` elsewhere, set `command` to this repo's
+`.venv/bin/python` with an absolute path.
 
 Optional OAuth:
 

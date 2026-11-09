@@ -1,0 +1,25 @@
+[Unit]
+Description=DevScope local bridge (loopback FastAPI on 127.0.0.1:7878)
+After=default.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/REPLACE_WITH_REPO_ROOT
+ExecStart=%h/REPLACE_WITH_REPO_ROOT/.venv/bin/python -m devscope_bridge.main
+Restart=on-failure
+RestartSec=3
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=ORCHESTRATOR_MAX_WORKERS=3
+# Autonomy tick loop stays off unless you opt in:
+# Environment=ORCHESTRATOR_ENABLED=1
+# Uncomment and set after loading the Chrome extension:
+# Environment=BRIDGE_EXTENSION_ID=chrome-extension://PASTE_ID
+
+# Soft file descriptor floor (mirrors the macOS LaunchAgent).
+LimitNOFILE=65536
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
