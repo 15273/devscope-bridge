@@ -8,15 +8,23 @@ real plan utilization percentages (not derivable from ccusage):
   - seven_day_sonnet / _opus : per-model weekly limits
   - extra_usage: pay-as-you-go credits ("usage credits")
 
-Auth reuses the OAuth access token Claude Code stores in the macOS Keychain
-(service "Claude Code-credentials"). Runs locally, cached for `_TTL_S`.
-Degrades to `{available: False}` when the token or endpoint is unavailable.
+Auth reuses the OAuth access token Claude Code already stores locally:
+  - macOS Keychain service "Claude Code-credentials" (preferred when present)
+  - otherwise `~/.claude/.credentials.json` (Linux/Windows; respects
+    `CLAUDE_CONFIG_DIR` the same way the CLI does)
+
+Runs locally, cached for `_TTL_S`. Degrades to `{available: False}` when the
+token or endpoint is unavailable. The access token is never logged.
 """
+
+from __future__ import annotations
 
 import asyncio
 import json
 import logging
+import os
 import time
+from pathlib import Path
 
 import httpx
 
@@ -25,6 +33,7 @@ logger = logging.getLogger(__name__)
 _USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 _BETA_HEADER = "oauth-2025-04-20"
 _KEYCHAIN_SERVICE = "Claude Code-credentials"
+_CREDENTIALS_FILENAME = ".credentials.json"
 
 _TTL_S = 60.0
 _RUN_TIMEOUT_S = 8.0
@@ -41,8 +50,41 @@ def _empty() -> dict:
     return {"available": False}
 
 
-async def _read_oauth_token() -> str | None:
-    """Read the OAuth access token from the macOS Keychain."""
+def _credentials_path() -> Path:
+    """Path to Claude Code's credentials file (honours CLAUDE_CONFIG_DIR)."""
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+    base = Path(config_dir) if config_dir else Path.home() / ".claude"
+    return base / _CREDENTIALS_FILENAME
+
+
+def _token_from_credentials_payload(data: object) -> str | None:
+    """Extract accessToken from a Claude credentials JSON object. Never logs it."""
+    if not isinstance(data, dict):
+        return None
+    oauth = data.get("claudeAiOauth")
+    if not isinstance(oauth, dict):
+        return None
+    token = oauth.get("accessToken")
+    if isinstance(token, str) and token.strip():
+        return token
+    return None
+
+
+def _read_oauth_token_from_file() -> str | None:
+    """Read the OAuth access token from Claude Code's credentials file."""
+    path = _credentials_path()
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        return _token_from_credentials_payload(json.loads(raw))
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+async def _read_oauth_token_from_keychain() -> str | None:
+    """Read the OAuth access token from the macOS Keychain (no-op elsewhere)."""
     try:
         proc = await asyncio.create_subprocess_exec(
             "security", "find-generic-password", "-s", _KEYCHAIN_SERVICE, "-w",
@@ -55,9 +97,17 @@ async def _read_oauth_token() -> str | None:
     if proc.returncode != 0 or not stdout:
         return None
     try:
-        return json.loads(stdout.decode("utf-8"))["claudeAiOauth"]["accessToken"]
-    except (json.JSONDecodeError, KeyError, TypeError):
+        return _token_from_credentials_payload(json.loads(stdout.decode("utf-8")))
+    except (json.JSONDecodeError, TypeError):
         return None
+
+
+async def _read_oauth_token() -> str | None:
+    """Keychain first (macOS); fall back to the credentials file on any platform."""
+    token = await _read_oauth_token_from_keychain()
+    if token:
+        return token
+    return await asyncio.to_thread(_read_oauth_token_from_file)
 
 
 def _bucket(raw: dict, key: str) -> dict | None:
