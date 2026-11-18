@@ -11,6 +11,7 @@ import type { BrowserToolResult } from './browser_tools_types';
 import { resolveTab, isRestrictedUrl } from './tab_resolver';
 import { runInTab, runInTabWithArgs, runInAllFrames } from './frame_runner';
 import { storeRefMap, type RefLocator } from './ref_map';
+import { filterConsoleEntries, filterNetworkEntries } from './log_filters';
 
 export function unwrapInjectedError(r: BrowserToolResult): BrowserToolResult {
   if (r.ok && r.data && typeof r.data === 'object' && 'error' in (r.data as object)) {
@@ -193,19 +194,41 @@ export async function browserEvaluate(expression: string, tabId?: number): Promi
   ).then(unwrapInjectedError);
 }
 
-export async function browserGetNetwork(tabId?: number): Promise<BrowserToolResult> {
-  return runInTab(() => {
+export async function browserGetNetwork(tabId?: number, sinceTs?: number): Promise<BrowserToolResult> {
+  const result = await runInTab(() => {
+    const timeOrigin = performance.timeOrigin;
     const resources = performance.getEntriesByType('resource').slice(-150).map((e) => {
       const r = e as PerformanceResourceTiming;
-      return { name: r.name, type: r.initiatorType, durationMs: Math.round(r.duration), transferSize: r.transferSize, startMs: Math.round(r.startTime) };
+      return {
+        name: r.name,
+        type: r.initiatorType,
+        durationMs: Math.round(r.duration),
+        transferSize: r.transferSize,
+        startMs: Math.round(r.startTime),
+        wall_ts: timeOrigin + r.startTime,
+      };
     });
     const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-    return { url: location.href, count: resources.length, navigation: nav ? { type: nav.type, durationMs: Math.round(nav.duration) } : null, resources };
+    return {
+      url: location.href,
+      timeOrigin,
+      count: resources.length,
+      navigation: nav ? { type: nav.type, durationMs: Math.round(nav.duration) } : null,
+      resources,
+    };
   }, tabId);
+  if (!result.ok || !result.data || typeof result.data !== 'object') return result;
+  const payload = result.data as { resources?: Array<{ wall_ts?: number; startMs?: number }>; timeOrigin?: number; [k: string]: unknown };
+  const filtered = filterNetworkEntries(payload.resources ?? [], {
+    tabId,
+    sinceTs,
+    timeOriginMs: payload.timeOrigin,
+  });
+  return { ...result, data: { ...payload, count: filtered.length, resources: filtered } };
 }
 
-export async function browserGetConsole(maxReturn: number, tabId?: number): Promise<BrowserToolResult> {
-  return runInTabWithArgs(
+export async function browserGetConsole(maxReturn: number, tabId?: number, sinceTs?: number): Promise<BrowserToolResult> {
+  const result = await runInTabWithArgs(
     (limit: number) => {
       const KEY = '__devscopeConsole';
       const store = window as unknown as Record<string, Array<Record<string, unknown>> | undefined>;
@@ -233,6 +256,10 @@ export async function browserGetConsole(maxReturn: number, tabId?: number): Prom
     'MAIN',
     tabId,
   );
+  if (!result.ok || !result.data || typeof result.data !== 'object') return result;
+  const payload = result.data as { entries?: Array<{ ts?: number }>; [k: string]: unknown };
+  const filtered = filterConsoleEntries(payload.entries ?? [], { tabId, sinceTs }).slice(-maxReturn);
+  return { ...result, data: { ...payload, count: filtered.length, entries: filtered } };
 }
 
 export async function browserHighlight(selectors: string[], labels: string[], tabId?: number): Promise<BrowserToolResult> {
