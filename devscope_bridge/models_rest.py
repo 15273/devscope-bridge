@@ -183,10 +183,39 @@ class SlashCommandCard(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+class ConnectedExtension(BaseModel):
+    """A Chrome extension that currently holds a WebSocket to this bridge."""
+    session: str
+    profile_id: str = ""
+    profile_label: str = ""
+
+
+class HealthTab(BaseModel):
+    """A tab last seen on a connected extension or a loopback CDP endpoint."""
+    id: str | int | None = None
+    title: str = ""
+    url: str = ""  # query string stripped
+    profile: str = ""
+
+
+class NamedProfileStatus(BaseModel):
+    """daily / qa (or any named CDP target) reachability."""
+    name: str
+    label: str = ""
+    cdp: str | None = None
+    cdp_ok: bool = False
+    extension_connected: bool = False
+    tabs: int = 0
+
+
 class HealthResponse(BaseModel):
     ok: bool = True
     version: str = "0.1"
     uptime_s: int
+    extensions: list[ConnectedExtension] = []
+    tabs: list[HealthTab] = []
+    profiles: list[NamedProfileStatus] = []
+    cdp_fallback: bool = False
 
 
 # ─────────────────────────────────────────────
