@@ -442,15 +442,20 @@ async def post_action(body: ActionRequest, auth: None) -> dict:
         if routed:
             requesting = routed
     if requesting is None or not has_active_ws(requesting):
-        connected = list(_active_ws.keys())
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                f"Browser client not connected (session={body.session!r}, "
-                f"connected={connected}). Reload DevScope unpacked from "
-                "extension/dist or open the side panel."
-            ),
-        )
+        from devscope_bridge.browser_cdp import run_cdp_action
+        try:
+            return await run_cdp_action(body.tool, body.args or {}, profile_name=profile_name)
+        except Exception as exc:
+            connected = list(_active_ws.keys())
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    f"Browser client not connected (session={body.session!r}, "
+                    f"profile={profile_name!r}, connected={connected}). "
+                    "Open the DevScope side panel, or set DEVSCOPE_CDP_ENDPOINTS "
+                    f"for the token-auth CDP fallback. ({exc})"
+                ),
+            ) from exc
 
     # browser_list_tabs aggregates across every connected profile.
     if body.tool == "browser_list_tabs":
