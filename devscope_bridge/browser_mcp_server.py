@@ -583,6 +583,26 @@ async def linkedin_scrape_profile(
     )
 
 
+@mcp.tool()
+async def browser_run_steps(
+    steps: list[dict],
+    max_retries: int = 2,
+    tab_id: int | None = None,
+    profile: str | None = None,
+) -> dict[str, Any]:
+    """Run a plan of browser steps, verifying each one and retrying on failure.
+
+    Each step is {tool, args, verify?}. verify may include text, selector,
+    selector_exists, url_includes, console_not_contains. Submit / auto-apply
+    tools are refused. This is the verified task loop; it does not invent steps.
+    """
+    return await _forward_to_bridge(
+        "browser_run_steps",
+        {"steps": steps, "max_retries": max_retries, **_tab_kwargs(tab_id, profile=profile)},
+        timeout=120.0,
+    )
+
+
 # ─────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────

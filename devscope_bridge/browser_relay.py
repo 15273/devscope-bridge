@@ -436,6 +436,30 @@ async def post_action(body: ActionRequest, auth: None) -> dict:
     else:
         profile_name = None
 
+    if body.tool == "browser_run_steps":
+        from devscope_bridge.task_loop import run_verified_steps
+
+        async def _dispatch(tool: str, args: dict[str, Any]) -> dict[str, Any]:
+            if tool == "browser_run_steps":
+                return {"ok": False, "data": None, "error": "nested browser_run_steps is not allowed"}
+            nested = ActionRequest(
+                tool=tool,
+                args=args,
+                session=body.session,
+                profile=profile_name,
+                quiet=True,
+            )
+            return await post_action(nested, auth)
+
+        result = await run_verified_steps(
+            (body.args or {}).get("steps") or [],
+            _dispatch,
+            max_retries=int((body.args or {}).get("max_retries") or 2),
+            tab_id=(body.args or {}).get("tab_id", (body.args or {}).get("tabId")),
+            profile=profile_name,
+        )
+        return result
+
     requesting = body.session or first_active_session()
     if profile_name:
         routed = _session_for_named_profile(profile_name)
