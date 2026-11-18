@@ -59,6 +59,8 @@ def patch_startup_token(monkeypatch, tmp_path):
     relay._active_ws.clear()
     relay._pending_actions.clear()
     relay._action_session.clear()
+    if hasattr(relay, '_last_tabs'):
+        relay._last_tabs.clear()
     yield
     relay._active_ws.clear()
     relay._pending_actions.clear()

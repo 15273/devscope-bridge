@@ -71,6 +71,9 @@ _ws_profile: dict[str, dict[str, str]] = {}
 # tab_id → profile_id  (learned from browser_list_tabs fan-out; drives routing)
 _tab_profile: dict[int, str] = {}
 
+# Last aggregated tab list (for /health; no extra fan-out on every probe)
+_last_tabs: list[dict[str, Any]] = []
+
 
 # ─────────────────────────────────────────────
 # WS registry helpers
@@ -124,12 +127,33 @@ def candidate_sessions() -> list[str]:
     return list(_one_session_per_profile().values())
 
 
+def cached_tabs() -> list[dict[str, Any]]:
+    """Tabs from the last successful list_tabs fan-out (may be empty)."""
+    return list(_last_tabs)
+
+
+def remember_tabs(tabs: list[dict[str, Any]]) -> None:
+    """Cache a tab list so /health can show it without another fan-out."""
+    global _last_tabs
+    _last_tabs = list(tabs or [])
+
+
 def connection_summary() -> dict[str, Any]:
-    """Lightweight status for /capabilities (extension Settings)."""
+    """Status for /health and /capabilities: extensions, cached tabs, profiles."""
     profiles = list(_ws_profile.values())
+    extensions = []
+    for session_name in _active_ws:
+        meta = _ws_profile.get(session_name) or {}
+        extensions.append({
+            "session": session_name,
+            "profile_id": meta.get("profile_id", ""),
+            "profile_label": meta.get("profile_label", ""),
+        })
     return {
         "connected_sessions": len(_active_ws),
-        "connected_profiles": len(profiles),
+        "connected_profiles": len({_profile_of(s) for s in _active_ws}),
+        "extensions": extensions,
+        "tabs": cached_tabs(),
         "profiles": [
             {"id": p.get("profile_id", ""), "label": p.get("profile_label", "")}
             for p in profiles
@@ -328,6 +352,7 @@ async def _list_tabs_all_profiles() -> dict[str, Any]:
         _query(pid, sess) for pid, sess in per_profile.items()
     ])
 
+    remember_tabs(all_tabs)
     return {
         "tabs": all_tabs,
         "windows": all_windows,
