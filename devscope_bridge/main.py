@@ -97,8 +97,11 @@ async def lifespan(app: FastAPI):
     from devscope_bridge.meta_ads import meta_ads_poller
     meta_poller_task = asyncio.create_task(meta_ads_poller.run_forever())
     logger.info("meta ads poller started")
-    print(f"\nDev Bridge started. Token: {_startup_token}\n")
-    logger.info("Dev Bridge ready on 127.0.0.1:7878")
+    from devscope_bridge.log_redact import set_known_token, install_redacting_filter
+    set_known_token(_startup_token)
+    install_redacting_filter()
+    print("\nDev Bridge started. Token stored at ~/.dev-bridge/token (value not printed).\n")
+    logger.info("Dev Bridge ready on 127.0.0.1:7878 (token len=%s)", len(_startup_token))
     yield
     logger.info("Dev Bridge shutting down")
     poller_task.cancel()
@@ -167,7 +170,47 @@ app.include_router(recording_router, dependencies=[Depends(require_auth)])
 
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    return HealthResponse(ok=True, version="0.1", uptime_s=int(time.time() - _start_time))
+    """Liveness plus a snapshot of connected extensions, tabs, and named profiles.
+
+    Still unauthenticated (loopback only). Tab URLs have their query strings
+    stripped so a token never appears here.
+    """
+    from devscope_bridge.log_redact import redact_url_query
+    from devscope_bridge.models_rest import ConnectedExtension, HealthTab, NamedProfileStatus
+
+    summary = browser_relay.connection_summary()
+    extensions = [
+        ConnectedExtension(
+            session=e.get("session") or "",
+            profile_id=e.get("profile_id") or "",
+            profile_label=e.get("profile_label") or "",
+        )
+        for e in (summary.get("extensions") or [])
+    ]
+    tabs = [
+        HealthTab(
+            id=tab.get("id", tab.get("tab_id")),
+            title=tab.get("title") or "",
+            url=redact_url_query(str(tab.get("url") or "")),
+            profile=str(tab.get("profile") or tab.get("profile_id") or tab.get("profile_label") or ""),
+        )
+        for tab in (summary.get("tabs") or browser_relay.cached_tabs())
+    ]
+    try:
+        from devscope_bridge.browser_cdp import profile_health_snapshot
+        profile_rows = await profile_health_snapshot(summary.get("extensions") or [], timeout=0.4)
+    except Exception:
+        profile_rows = []
+    profiles = [NamedProfileStatus(**row) for row in profile_rows]
+    return HealthResponse(
+        ok=True,
+        version="0.1",
+        uptime_s=int(time.time() - _start_time),
+        extensions=extensions,
+        tabs=tabs,
+        profiles=profiles,
+        cdp_fallback=any(p.cdp_ok for p in profiles),
+    )
 
 
 def _assert_loopback_host(host: str) -> None:
@@ -205,6 +248,9 @@ def _configure_logging(log_dir: Path = BRIDGE_DIR) -> None:
     # Poll-heavy endpoints would otherwise log an access line every few
     # seconds per connected panel — demote to WARNING (errors still surface).
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+    from devscope_bridge.log_redact import install_redacting_filter
+    install_redacting_filter()
 
 
 def run() -> None:

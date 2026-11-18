@@ -71,6 +71,9 @@ _ws_profile: dict[str, dict[str, str]] = {}
 # tab_id → profile_id  (learned from browser_list_tabs fan-out; drives routing)
 _tab_profile: dict[int, str] = {}
 
+# Last aggregated tab list (for /health; no extra fan-out on every probe)
+_last_tabs: list[dict[str, Any]] = []
+
 
 # ─────────────────────────────────────────────
 # WS registry helpers
@@ -124,12 +127,33 @@ def candidate_sessions() -> list[str]:
     return list(_one_session_per_profile().values())
 
 
+def cached_tabs() -> list[dict[str, Any]]:
+    """Tabs from the last successful list_tabs fan-out (may be empty)."""
+    return list(_last_tabs)
+
+
+def remember_tabs(tabs: list[dict[str, Any]]) -> None:
+    """Cache a tab list so /health can show it without another fan-out."""
+    global _last_tabs
+    _last_tabs = list(tabs or [])
+
+
 def connection_summary() -> dict[str, Any]:
-    """Lightweight status for /capabilities (extension Settings)."""
+    """Status for /health and /capabilities: extensions, cached tabs, profiles."""
     profiles = list(_ws_profile.values())
+    extensions = []
+    for session_name in _active_ws:
+        meta = _ws_profile.get(session_name) or {}
+        extensions.append({
+            "session": session_name,
+            "profile_id": meta.get("profile_id", ""),
+            "profile_label": meta.get("profile_label", ""),
+        })
     return {
         "connected_sessions": len(_active_ws),
-        "connected_profiles": len(profiles),
+        "connected_profiles": len({_profile_of(s) for s in _active_ws}),
+        "extensions": extensions,
+        "tabs": cached_tabs(),
         "profiles": [
             {"id": p.get("profile_id", ""), "label": p.get("profile_label", "")}
             for p in profiles
@@ -328,6 +352,7 @@ async def _list_tabs_all_profiles() -> dict[str, Any]:
         _query(pid, sess) for pid, sess in per_profile.items()
     ])
 
+    remember_tabs(all_tabs)
     return {
         "tabs": all_tabs,
         "windows": all_windows,
@@ -352,6 +377,9 @@ class ActionRequest(BaseModel):
     args: dict[str, Any] = {}
     session: str | None = None
     quiet: bool = False
+    # Named browser profile ("daily", "qa", …). Routes to that Chrome's WS
+    # or, if the side panel is closed, to its loopback CDP endpoint.
+    profile: str | None = None
 
 
 def _target_session(tool: str, args: dict[str, Any], requesting: str) -> str:
@@ -371,9 +399,48 @@ def _target_session(tool: str, args: dict[str, Any], requesting: str) -> str:
     return requesting
 
 
+def _session_for_named_profile(name: str) -> str | None:
+    """Active WS whose profile_id or profile_label matches a named profile."""
+    wanted = (name or "").strip().lower()
+    if not wanted:
+        return None
+    for session_name in _active_ws:
+        meta = _ws_profile.get(session_name) or {}
+        labels = {
+            _profile_of(session_name).lower(),
+            str(meta.get("profile_id") or "").lower(),
+            str(meta.get("profile_label") or "").lower(),
+        }
+        if wanted in labels:
+            return session_name
+    return None
+
+
+def _apply_read_filters(tool: str, args: dict[str, Any], data: Any) -> Any:
+    """Apply tab / since_ts filters to console and network payloads."""
+    from devscope_bridge.browser_filters import filter_console, filter_network
+    tab_id = args.get("tab_id", args.get("tabId", args.get("tab")))
+    since_ts = args.get("since_ts", args.get("sinceTs"))
+    if tool == "browser_get_console":
+        return filter_console(data, tab_id=tab_id if tab_id not in (None, "") else None, since_ts=since_ts)
+    if tool == "browser_get_network":
+        return filter_network(data, tab_id=tab_id if tab_id not in (None, "") else None, since_ts=since_ts)
+    return data
+
+
 async def post_action(body: ActionRequest, auth: None) -> dict:
     """Forward a browser tool call to the Chrome extension via the active WS."""
+    profile_name = body.profile or (body.args or {}).get("profile")
+    if isinstance(profile_name, str):
+        profile_name = profile_name.strip() or None
+    else:
+        profile_name = None
+
     requesting = body.session or first_active_session()
+    if profile_name:
+        routed = _session_for_named_profile(profile_name)
+        if routed:
+            requesting = routed
     if requesting is None or not has_active_ws(requesting):
         connected = list(_active_ws.keys())
         raise HTTPException(
@@ -391,4 +458,7 @@ async def post_action(body: ActionRequest, auth: None) -> dict:
 
     target = _target_session(body.tool, body.args, requesting)
     result = await _send_action(target, body.tool, body.args, quiet=body.quiet)
-    return {"ok": result.ok, "data": result.data, "error": result.error}
+    data = result.data
+    if result.ok:
+        data = _apply_read_filters(body.tool, body.args or {}, data)
+    return {"ok": result.ok, "data": data, "error": result.error}
