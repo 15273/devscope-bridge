@@ -97,8 +97,11 @@ async def lifespan(app: FastAPI):
     from devscope_bridge.meta_ads import meta_ads_poller
     meta_poller_task = asyncio.create_task(meta_ads_poller.run_forever())
     logger.info("meta ads poller started")
-    print(f"\nDev Bridge started. Token: {_startup_token}\n")
-    logger.info("Dev Bridge ready on 127.0.0.1:7878")
+    from devscope_bridge.log_redact import set_known_token, install_redacting_filter
+    set_known_token(_startup_token)
+    install_redacting_filter()
+    print("\nDev Bridge started. Token stored at ~/.dev-bridge/token (value not printed).\n")
+    logger.info("Dev Bridge ready on 127.0.0.1:7878 (token len=%s)", len(_startup_token))
     yield
     logger.info("Dev Bridge shutting down")
     poller_task.cancel()
@@ -205,6 +208,9 @@ def _configure_logging(log_dir: Path = BRIDGE_DIR) -> None:
     # Poll-heavy endpoints would otherwise log an access line every few
     # seconds per connected panel — demote to WARNING (errors still surface).
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+
+    from devscope_bridge.log_redact import install_redacting_filter
+    install_redacting_filter()
 
 
 def run() -> None:
