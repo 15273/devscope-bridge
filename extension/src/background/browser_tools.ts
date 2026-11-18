@@ -250,10 +250,17 @@ export async function executeBrowserTool(
       result = await browserSnapshot(effectiveTabId);
       break;
     case 'browser_get_network':
-      result = await browserGetNetwork(effectiveTabId);
+      result = await browserGetNetwork(
+        effectiveTabId,
+        args.since_ts != null ? Number(args.since_ts) : (args.sinceTs != null ? Number(args.sinceTs) : undefined),
+      );
       break;
     case 'browser_get_console':
-      result = await browserGetConsole(Number(args.max ?? 100), effectiveTabId);
+      result = await browserGetConsole(
+        Number(args.max ?? 100),
+        effectiveTabId,
+        args.since_ts != null ? Number(args.since_ts) : (args.sinceTs != null ? Number(args.sinceTs) : undefined),
+      );
       break;
     case 'browser_highlight':
       result = await browserHighlight(
