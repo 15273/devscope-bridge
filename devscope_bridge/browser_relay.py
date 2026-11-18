@@ -396,6 +396,18 @@ def _target_session(tool: str, args: dict[str, Any], requesting: str) -> str:
     return requesting
 
 
+def _apply_read_filters(tool: str, args: dict[str, Any], data: Any) -> Any:
+    """Apply tab / since_ts filters to console and network payloads."""
+    from devscope_bridge.browser_filters import filter_console, filter_network
+    tab_id = args.get("tab_id", args.get("tabId", args.get("tab")))
+    since_ts = args.get("since_ts", args.get("sinceTs"))
+    if tool == "browser_get_console":
+        return filter_console(data, tab_id=tab_id if tab_id not in (None, "") else None, since_ts=since_ts)
+    if tool == "browser_get_network":
+        return filter_network(data, tab_id=tab_id if tab_id not in (None, "") else None, since_ts=since_ts)
+    return data
+
+
 async def post_action(body: ActionRequest, auth: None) -> dict:
     """Forward a browser tool call to the Chrome extension via the active WS."""
     requesting = body.session or first_active_session()
@@ -416,4 +428,7 @@ async def post_action(body: ActionRequest, auth: None) -> dict:
 
     target = _target_session(body.tool, body.args, requesting)
     result = await _send_action(target, body.tool, body.args, quiet=body.quiet)
-    return {"ok": result.ok, "data": result.data, "error": result.error}
+    data = result.data
+    if result.ok:
+        data = _apply_read_filters(body.tool, body.args or {}, data)
+    return {"ok": result.ok, "data": data, "error": result.error}

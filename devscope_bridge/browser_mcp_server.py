@@ -151,9 +151,20 @@ async def _forward_to_bridge(
     return resp.json()
 
 
-def _tab_kwargs(tab_id: int | None) -> dict[str, Any]:
-    """Optional tab_id — omit to use the session-bound tab from DevScope UI."""
-    return {"tab_id": tab_id} if tab_id is not None else {}
+def _tab_kwargs(
+    tab_id: int | None,
+    since_ts: float | int | None = None,
+    profile: str | None = None,
+) -> dict[str, Any]:
+    """Optional tab_id / since_ts / profile — omit tab_id to use the bound tab."""
+    args: dict[str, Any] = {}
+    if tab_id is not None:
+        args["tab_id"] = tab_id
+    if since_ts is not None:
+        args["since_ts"] = since_ts
+    if profile:
+        args["profile"] = profile
+    return args
 
 
 # ─────────────────────────────────────────────
@@ -296,15 +307,30 @@ async def browser_snapshot(tab_id: int | None = None) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def browser_get_network(tab_id: int | None = None) -> dict[str, Any]:
-    """Return recent network activity for a tab from the Resource Timing API."""
-    return await _forward_to_bridge("browser_get_network", _tab_kwargs(tab_id))
+async def browser_get_network(
+    tab_id: int | None = None,
+    since_ts: float | None = None,
+    profile: str | None = None,
+) -> dict[str, Any]:
+    """Return recent network activity for a tab, optionally filtered by since_ts (unix seconds) and profile."""
+    return await _forward_to_bridge(
+        "browser_get_network",
+        _tab_kwargs(tab_id, since_ts=since_ts, profile=profile),
+    )
 
 
 @mcp.tool()
-async def browser_get_console(max: int = 100, tab_id: int | None = None) -> dict[str, Any]:
-    """Return captured console output for a tab."""
-    return await _forward_to_bridge("browser_get_console", {"max": max, **_tab_kwargs(tab_id)})
+async def browser_get_console(
+    max: int = 100,
+    tab_id: int | None = None,
+    since_ts: float | None = None,
+    profile: str | None = None,
+) -> dict[str, Any]:
+    """Return captured console output for a tab, optionally filtered by since_ts (unix seconds) and profile."""
+    return await _forward_to_bridge(
+        "browser_get_console",
+        {"max": max, **_tab_kwargs(tab_id, since_ts=since_ts, profile=profile)},
+    )
 
 
 # ─────────────────────────────────────────────
