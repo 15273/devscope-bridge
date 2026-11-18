@@ -377,6 +377,9 @@ class ActionRequest(BaseModel):
     args: dict[str, Any] = {}
     session: str | None = None
     quiet: bool = False
+    # Named browser profile ("daily", "qa", …). Routes to that Chrome's WS
+    # or, if the side panel is closed, to its loopback CDP endpoint.
+    profile: str | None = None
 
 
 def _target_session(tool: str, args: dict[str, Any], requesting: str) -> str:
@@ -396,6 +399,23 @@ def _target_session(tool: str, args: dict[str, Any], requesting: str) -> str:
     return requesting
 
 
+def _session_for_named_profile(name: str) -> str | None:
+    """Active WS whose profile_id or profile_label matches a named profile."""
+    wanted = (name or "").strip().lower()
+    if not wanted:
+        return None
+    for session_name in _active_ws:
+        meta = _ws_profile.get(session_name) or {}
+        labels = {
+            _profile_of(session_name).lower(),
+            str(meta.get("profile_id") or "").lower(),
+            str(meta.get("profile_label") or "").lower(),
+        }
+        if wanted in labels:
+            return session_name
+    return None
+
+
 def _apply_read_filters(tool: str, args: dict[str, Any], data: Any) -> Any:
     """Apply tab / since_ts filters to console and network payloads."""
     from devscope_bridge.browser_filters import filter_console, filter_network
@@ -410,7 +430,17 @@ def _apply_read_filters(tool: str, args: dict[str, Any], data: Any) -> Any:
 
 async def post_action(body: ActionRequest, auth: None) -> dict:
     """Forward a browser tool call to the Chrome extension via the active WS."""
+    profile_name = body.profile or (body.args or {}).get("profile")
+    if isinstance(profile_name, str):
+        profile_name = profile_name.strip() or None
+    else:
+        profile_name = None
+
     requesting = body.session or first_active_session()
+    if profile_name:
+        routed = _session_for_named_profile(profile_name)
+        if routed:
+            requesting = routed
     if requesting is None or not has_active_ws(requesting):
         connected = list(_active_ws.keys())
         raise HTTPException(
