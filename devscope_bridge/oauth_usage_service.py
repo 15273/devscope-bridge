@@ -110,6 +110,11 @@ async def _read_oauth_token() -> str | None:
     return await asyncio.to_thread(_read_oauth_token_from_file)
 
 
+async def read_oauth_token() -> str | None:
+    """Public token lookup for usage fetch and Claude cloud teleport."""
+    return await _read_oauth_token()
+
+
 def _bucket(raw: dict, key: str) -> dict | None:
     """Normalise one usage bucket to {utilization, resets_at}."""
     data = raw.get(key)
@@ -137,7 +142,7 @@ def _parse(raw: dict) -> dict:
 
 async def _fetch() -> dict:
     """Fetch usage once; never raises — returns {available: False} on any error."""
-    token = await _read_oauth_token()
+    token = await read_oauth_token()
     if not token:
         logger.info("OAuth token unavailable; usage limits disabled")
         return _empty()

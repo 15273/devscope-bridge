@@ -56,6 +56,8 @@ export default {
         cursor: '#7C6AF5',
         codex: '#10A37F',
         antigravity: '#4285F4',
+        grok: '#1DA1F2',
+        'grok-bot': '#7C3AED',
       },
       fontFamily: {
         sans: [

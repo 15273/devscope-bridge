@@ -14,7 +14,7 @@ class ScheduleTemplateBody(BaseModel):
     domain: str | None = None
     instruction: str | None = None
     autonomy: str | None = None
-    agent: str = Field(default="claude", pattern="^(claude|cursor)$")
+    agent: str = Field(default="claude", pattern="^(claude|cursor|grok|grok_bot)$")
     mode: str | None = Field(default="act", pattern="^(act|plan|inspect|test)$")
     recurrence: dict[str, Any] = Field(default_factory=dict)
 
@@ -24,7 +24,7 @@ class ScheduleSetupStartBody(BaseModel):
     goal: str
     entry_url: str
     domain: str = "browser"
-    agent: str = Field(default="claude", pattern="^(claude|cursor)$")
+    agent: str = Field(default="claude", pattern="^(claude|cursor|grok|grok_bot)$")
     setup_mode: str = Field(default="inspect", pattern="^(inspect|plan|act)$")
     instruction: str | None = None
 
@@ -64,4 +64,4 @@ class ScheduleDiscoverBody(BaseModel):
     goal: str
     session: str | None = None
     domain: str = "browser"
-    agent: str = Field(default="claude", pattern="^(claude|cursor)$")
+    agent: str = Field(default="claude", pattern="^(claude|cursor|grok|grok_bot)$")

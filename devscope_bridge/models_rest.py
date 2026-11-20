@@ -63,6 +63,7 @@ class DiscoveredClaudeSession(BaseModel):
 
 class DiscoverClaudeSessionsResponse(BaseModel):
     items: list[DiscoveredClaudeSession] = Field(default_factory=list)
+    cloud_error: str | None = None
 
 
 class ClaudeSessionImportRequest(BaseModel):

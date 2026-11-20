@@ -199,6 +199,22 @@ async def run_prompt(
             mode=effective_mode, model=effective_model,
         )
 
+    if agent in ("grok", "grok_bot"):
+        resume_id = None if automation_turn else (prior_session_id or None)
+        if compact_pre:
+            full_prompt = compact_pre + _PREAMBLE_USER_MSG_SEPARATOR + full_prompt
+        session_store.append_bridge_turn(name, "user", prompt)
+        logger.info(
+            "Session '%s' → %s (cwd=%s mode=%s resume=%s)",
+            name, agent, cwd, effective_mode, bool(resume_id),
+        )
+        from devscope_bridge import session_manager_grok
+        return await session_manager_grok.dispatch_grok(
+            name, full_prompt, resume_id, cwd,
+            mode=effective_mode, model=effective_model,
+            bot=agent == "grok_bot",
+        )
+
     if agent in ("codex", "antigravity"):
         resume_id = None if automation_turn else (prior_session_id or None)
         if compact_pre:

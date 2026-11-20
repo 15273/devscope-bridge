@@ -46,13 +46,26 @@ class BridgeSessionRunner:
         """
         from devscope_bridge.agents import parse_agent
         agent = parse_agent(agent)
-        if session_store.get_session(name) is None:
+        existing = session_store.get_session(name)
+        if existing is None:
             session_store.create_session_metadata(
                 name=name,
                 agent=agent,
                 cwd=cwd or DEFAULT_CWD,
                 mode=mode,
                 purpose=_purpose_for_session(name),
+            )
+        elif (
+            existing.get("agent") != agent
+            or (cwd and existing.get("cwd") != cwd)
+            or existing.get("mode") != mode
+        ):
+            session_store.upsert_session(
+                name,
+                existing.get("session_id") or "",
+                agent=agent,
+                cwd=cwd,
+                mode=mode,
             )
         await session_manager.run_prompt(name, prompt, mode=mode)
         return await self._await_turn(name, timeout_s)

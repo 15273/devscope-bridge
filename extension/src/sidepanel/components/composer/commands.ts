@@ -9,7 +9,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { AgentMode, PageAttachment, PageAttachmentKind } from '@/shared/frames';
 import type { SlashCommand } from '../../bridge';
 
-export type NativeAction = 'mode' | 'attach' | 'pick' | 'help' | 'clear' | 'reset' | 'export';
+export type NativeAction = 'mode' | 'attach' | 'pick' | 'help' | 'clear' | 'reset' | 'export' | 'resume';
 
 export interface NativeCommand extends SlashCommand {
   source: 'native';
@@ -31,6 +31,13 @@ export const NATIVE_COMMANDS: NativeCommand[] = [
   { name: '/clear', description: 'Clear attached context', source: 'native', action: 'clear' },
   { name: '/reset', description: 'Recover a stuck session (fresh process, keeps history)', source: 'native', action: 'reset' },
   { name: '/export', description: 'Export the current chat to a Markdown file and download it', source: 'native', action: 'export' },
+  {
+    name: '/resume',
+    description: 'המשך שיחה קיימת — מקומית, מהענן, Claude / Grok / Codex',
+    source: 'native',
+    action: 'resume',
+    aliases: ['/continue', '/teleport'],
+  },
 ];
 
 export function isNativeCommand(cmd: SlashCommand): cmd is NativeCommand {

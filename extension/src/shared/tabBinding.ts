@@ -75,6 +75,19 @@ export function hostnameMatches(tabUrl: string, hintUrl: string): boolean {
   }
 }
 
+/** Tabs whose title is quoted in `text` or appears as a distinctive substring. */
+export function tabsMatchingTitle(text: string, tabs: BrowserTabSummary[]): BrowserTabSummary[] {
+  const quoted = [...text.matchAll(/"([^"]{4,})"/g)].map((m) => m[1].trim().toLowerCase());
+  const lower = text.toLowerCase();
+  return tabs.filter((t) => {
+    const title = t.title.trim();
+    if (title.length < 6) return false;
+    const tl = title.toLowerCase();
+    if (quoted.some((q) => tl.includes(q) || q.includes(tl))) return true;
+    return lower.includes(tl);
+  });
+}
+
 export function shortTabLabel(title: string, url: string, max = 36): string {
   const base = title.trim() || url;
   if (base.length <= max) return base;

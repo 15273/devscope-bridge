@@ -18,7 +18,7 @@ interface NewSessionModalProps {
 
 export function NewSessionModal({ existingNames, onSubmit, onClose }: NewSessionModalProps) {
   const [name, setName] = useState('');
-  const [agent, setAgent] = useState<Agent>('claude');
+  const [agent, setAgent] = useState<Agent>('grok');
   const [projectPaths, setProjectPaths] = useState<string[]>([]);
   const [selectedPath, setSelectedPath] = useState('');
   const [nameError, setNameError] = useState('');
@@ -34,7 +34,10 @@ export function NewSessionModal({ existingNames, onSubmit, onClose }: NewSession
         if (paths.length > 0) setSelectedPath(paths[0]);
       })
       .catch(() => {});
+    setName(suggestSessionName('grok', existingNames));
     nameRef.current?.focus();
+    // existingNames is the list at open-time; don't reset the field on every parent render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -104,7 +107,7 @@ export function NewSessionModal({ existingNames, onSubmit, onClose }: NewSession
     >
       <div className="w-[360px] rounded-lg border border-line bg-surface-overlay p-5 shadow-modal dark:shadow-modal-dark">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-fg">New chat</h2>
+          <h2 className="text-sm font-semibold text-fg">שיחה חדשה</h2>
           <button
             onClick={onClose}
             aria-label="Close"
@@ -116,7 +119,7 @@ export function NewSessionModal({ existingNames, onSubmit, onClose }: NewSession
 
         {/* Name */}
         <div className="mb-3">
-          <label className="mb-1 block text-xs font-medium text-fg-muted">Name</label>
+          <label className="mb-1 block text-xs font-medium text-fg-muted">שם הסשן</label>
           <input
             ref={nameRef}
             type="text"
@@ -124,7 +127,7 @@ export function NewSessionModal({ existingNames, onSubmit, onClose }: NewSession
             maxLength={MAX_NAME}
             onChange={(e) => handleNameChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="e.g. feature-auth"
+            placeholder="grok, grok-bot, …"
             className={`w-full rounded-md border bg-surface px-3 py-2 text-sm text-fg outline-none transition-colors duration-fast ease-tool ${
               nameError ? 'border-danger focus:border-danger' : 'border-line focus:border-signal'
             }`}
@@ -141,8 +144,20 @@ export function NewSessionModal({ existingNames, onSubmit, onClose }: NewSession
 
         {/* Agent */}
         <div className="mb-3">
-          <label className="mb-1 block text-xs font-medium text-fg-muted">Agent</label>
-          <AgentSegment value={agent} onChange={setAgent} />
+          <label className="mb-1 block text-xs font-medium text-fg-muted">מי מדבר</label>
+          <AgentSegment
+            value={agent}
+            onChange={(next) => {
+              setAgent(next);
+              setName((prev) => {
+                const previousAuto = suggestSessionName(agent, existingNames);
+                if (!prev || prev === previousAuto) {
+                  return suggestSessionName(next, existingNames);
+                }
+                return prev;
+              });
+            }}
+          />
           {agent === 'cursor' && (
             <div className="mt-1.5 space-y-1 text-xs leading-snug text-fg-muted">
               <p>
@@ -168,11 +183,21 @@ export function NewSessionModal({ existingNames, onSubmit, onClose }: NewSession
               Requires the <span className="font-mono">agy</span> CLI. IDE chats can be imported from the hard-drive button (read-only unless the conversation id resumes).
             </p>
           )}
+          {agent === 'grok' && (
+            <p className="mt-1.5 text-xs leading-snug text-fg-muted">
+              Uses local <span className="font-mono">grok</span> CLI. Browser tools: DevScope Chrome, chrome-devtools, playwright.
+            </p>
+          )}
+          {agent === 'grok_bot' && (
+            <p className="mt-1.5 text-xs leading-snug text-fg-muted">
+              Grok עם <span className="font-mono">--always-approve</span> למשימות מתוזמנות — כולל כלי דפדפן, בלי אישורי כלים.
+            </p>
+          )}
         </div>
 
         {/* Project */}
         <div className="mb-4">
-          <label className="mb-1 block text-xs font-medium text-fg-muted">Project</label>
+          <label className="mb-1 block text-xs font-medium text-fg-muted">פרויקט</label>
           {projectPaths.length === 0 ? (
             <p className="text-xs text-fg-muted">
               No projects configured. <span className="text-signal">Add one in Settings →</span>
@@ -201,14 +226,14 @@ export function NewSessionModal({ existingNames, onSubmit, onClose }: NewSession
             onClick={onClose}
             className="rounded-md px-4 py-2 text-sm text-fg-muted transition-colors duration-fast ease-tool hover:bg-surface-raised"
           >
-            Cancel
+            ביטול
           </button>
           <button
             onClick={handleSubmit}
             disabled={!name || !!nameError || isSubmitting}
             className="rounded-md bg-signal px-4 py-2 text-sm font-medium text-signal-contrast transition-colors duration-fast ease-tool hover:bg-signal-hover disabled:opacity-40"
           >
-            {isSubmitting ? 'Creating…' : 'Create'}
+            {isSubmitting ? 'יוצר…' : 'התחל שיחה'}
           </button>
         </div>
       </div>
@@ -216,13 +241,25 @@ export function NewSessionModal({ existingNames, onSubmit, onClose }: NewSession
   );
 }
 
+function suggestSessionName(agent: Agent, taken: string[]): string {
+  const base = agent === 'grok_bot' ? 'grok-bot' : agent;
+  if (!taken.includes(base)) return base;
+  for (let i = 2; i < 100; i++) {
+    const candidate = `${base}-${i}`;
+    if (!taken.includes(candidate)) return candidate;
+  }
+  return `${base}-${Date.now().toString(36)}`;
+}
+
 function AgentSegment({ value, onChange }: { value: Agent; onChange: (a: Agent) => void }) {
   return (
-    <div className="grid w-full grid-cols-2 gap-0.5 rounded-md border border-line p-0.5 text-xs font-medium">
+    <div className="grid w-full grid-cols-3 gap-0.5 rounded-md border border-line p-0.5 text-xs font-medium">
       <AgentTab label="Claude" agent="claude" active={value === 'claude'} onClick={onChange} />
       <AgentTab label="Cursor" agent="cursor" active={value === 'cursor'} onClick={onChange} />
       <AgentTab label="Codex" agent="codex" active={value === 'codex'} onClick={onChange} />
       <AgentTab label="Antigravity" agent="antigravity" active={value === 'antigravity'} onClick={onChange} />
+      <AgentTab label="Grok" agent="grok" active={value === 'grok'} onClick={onChange} />
+      <AgentTab label="Grok Bot" agent="grok_bot" active={value === 'grok_bot'} onClick={onChange} />
     </div>
   );
 }

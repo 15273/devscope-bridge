@@ -27,6 +27,14 @@
     "meta-ads-control": {
       "command": "python3",
       "args": ["-m", "devscope_bridge.meta_ads_mcp_server"]
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@1.8.0"]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
     }
   }
 }

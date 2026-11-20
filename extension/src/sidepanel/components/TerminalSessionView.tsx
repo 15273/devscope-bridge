@@ -29,6 +29,7 @@ interface TerminalSessionViewProps {
     opts?: { context?: MessageContext; mode?: AgentMode; model?: string },
   ) => void;
   onOpenGlossary: () => void;
+  onResumeSessions?: () => void;
   onReset: () => void;
   recording: boolean;
   recordingPending: boolean;
@@ -48,6 +49,7 @@ export function TerminalSessionView({
   onBoundTabChange,
   onSendViaPty,
   onOpenGlossary,
+  onResumeSessions,
   onReset,
   recording,
   recordingPending,
@@ -110,6 +112,7 @@ export function TerminalSessionView({
         hideQuickReplies
         onSend={handleSend}
         onOpenGlossary={onOpenGlossary}
+        onResumeSessions={onResumeSessions}
         onReset={onReset}
         onBoundTabChange={onBoundTabChange}
         recording={recording}

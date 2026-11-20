@@ -1070,17 +1070,19 @@ async def _watchdog_loop(
         )
         if medic_due and not medic_triggered and medic_fn is not None:
             medic_triggered = True
-            trigger_elapsed = max(silence_elapsed, turn_elapsed)
+            # Pass the REAL silence and the turn duration separately — the old
+            # max(silence, turn) collapsed a 15-min *active* turn into a fake
+            # "silent 900s" bundle and the medic misdiagnosed it as stuck.
             reason = (
                 f"silent {silence_elapsed:.0f}s"
                 if silence_elapsed >= _WATCHDOG_MEDIC_S
-                else f"turn wall {turn_elapsed:.0f}s"
+                else f"turn wall {turn_elapsed:.0f}s (silent {silence_elapsed:.0f}s)"
             )
             logger.warning(
                 "Session '%s' medic trigger (%s) — dispatching Watchdog Medic",
                 name, reason,
             )
-            medic_fn(trigger_elapsed)
+            medic_fn(silence_elapsed, turn_elapsed)
 
         silence_due = silence_elapsed >= _WATCHDOG_HARD_CAP_S
         wall_due = turn_elapsed >= _WATCHDOG_TURN_WALL_CAP_S
@@ -1185,11 +1187,13 @@ async def continuous_reader(
         if hard_interrupt_fn is not None:
             hard_interrupt_fn()
 
-    def _medic_fn(elapsed_s: float) -> None:
+    def _medic_fn(silence_s: float, turn_s: float = 0.0) -> None:
         # Lazy import: watchdog_medic imports session_manager which imports this
         # module — importing at call time avoids the import cycle.
         from devscope_bridge import watchdog_medic
-        asyncio.ensure_future(watchdog_medic.run_medic(name, q, medic_active, elapsed_s))
+        asyncio.ensure_future(watchdog_medic.run_medic(
+            name, q, medic_active, silence_s, turn_elapsed_s=turn_s,
+        ))
 
     watchdog = asyncio.create_task(
         _watchdog_loop(

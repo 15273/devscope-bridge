@@ -533,7 +533,7 @@ export function useSessionManager() {
       loadSessionHistory(name)
         .then((messages) => {
           dispatch({ type: 'SET_HISTORY', name, messages });
-          if (agent === 'cursor' || agent === 'codex' || agent === 'antigravity') {
+          if (agent === 'cursor' || agent === 'codex' || agent === 'antigravity' || agent === 'grok' || agent === 'grok_bot') {
             void syncBridgeHistory(name, messagesToBridgeTurns(messages));
           }
         })
@@ -1227,7 +1227,11 @@ export function useSessionManager() {
   }, []);
 
   const importClaudeSession = useCallback(async (sessionId: string, source: string): Promise<string> => {
-    const isClaude = source === 'claude_code' || source === 'desktop_code' || source === 'desktop_local';
+    const isClaude =
+      source === 'claude_code' ||
+      source === 'desktop_code' ||
+      source === 'desktop_local' ||
+      source === 'claude_cloud';
     const info = isClaude
       ? await importClaudeSessionOnBridge(sessionId, source)
       : await importLocalSessionOnBridge(sessionId, source);

@@ -12,6 +12,7 @@ import {
 } from '@/shared/claudeModels';
 import { CODEX_MODEL_PRESETS, codexModelPreset } from '@/shared/codexModels';
 import { ANTIGRAVITY_MODEL_PRESETS, antigravityModelPreset } from '@/shared/antigravityModels';
+import { GROK_MODEL_PRESETS, grokModelPreset } from '@/shared/grokModels';
 import { AnchorPopover } from './AnchorPopover';
 
 const POPOVER_CLASS =
@@ -36,14 +37,18 @@ export function ModelPill({
       ? codexModelPreset(modelId)
       : agent === 'antigravity'
         ? antigravityModelPreset(modelId)
-        : claudeModelPreset(modelId);
+        : agent === 'grok' || agent === 'grok_bot'
+          ? grokModelPreset(modelId)
+          : claudeModelPreset(modelId);
   const isDefault = !modelId;
   const presets =
     agent === 'codex'
       ? CODEX_MODEL_PRESETS
       : agent === 'antigravity'
         ? ANTIGRAVITY_MODEL_PRESETS
-        : CLAUDE_MODEL_PRESETS;
+        : agent === 'grok' || agent === 'grok_bot'
+          ? GROK_MODEL_PRESETS
+          : CLAUDE_MODEL_PRESETS;
   const hint =
     agent === 'cursor'
       ? 'cursor-agent --model — applies on the next message.'
@@ -51,7 +56,9 @@ export function ModelPill({
         ? 'codex exec -m — applies on the next message.'
         : agent === 'antigravity'
           ? 'agy --model — applies on the next message.'
-          : 'Same list as Claude Code /model — applies on the next message.';
+          : agent === 'grok' || agent === 'grok_bot'
+            ? 'grok -m — applies on the next message. Grok Bot adds --always-approve.'
+            : 'Same list as Claude Code /model — applies on the next message.';
 
   useEffect(() => {
     if (!open) return;

@@ -1,5 +1,5 @@
 /**
- * Import local Claude / Codex / Antigravity sessions from disk.
+ * Import local Claude / Codex / Antigravity sessions, plus Claude Code cloud.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw, X } from 'lucide-react';
@@ -7,21 +7,24 @@ import type { DiscoveredLocalSession, LocalSessionSource } from '@/shared/frames
 import { discoverLocalSessions } from '../bridge';
 import { relativeTime } from '../utils/relativeTime';
 
-type Vendor = 'claude' | 'codex' | 'antigravity';
+type Vendor = 'claude' | 'codex' | 'antigravity' | 'grok';
 
 const VENDORS: { id: Vendor; label: string }[] = [
   { id: 'claude', label: 'Claude' },
   { id: 'codex', label: 'Codex' },
   { id: 'antigravity', label: 'Antigravity' },
+  { id: 'grok', label: 'Grok' },
 ];
 
 const GROUPS: { source: LocalSessionSource; label: string; vendor: Vendor }[] = [
+  { source: 'claude_cloud', label: 'Claude Code Cloud', vendor: 'claude' },
   { source: 'claude_code', label: 'Claude Code', vendor: 'claude' },
   { source: 'desktop_code', label: 'Desktop Code', vendor: 'claude' },
   { source: 'desktop_local', label: 'Desktop מקומי', vendor: 'claude' },
   { source: 'codex', label: 'Codex CLI', vendor: 'codex' },
   { source: 'antigravity_cli', label: 'agy CLI', vendor: 'antigravity' },
   { source: 'antigravity_ide', label: 'Antigravity IDE', vendor: 'antigravity' },
+  { source: 'grok', label: 'Grok CLI', vendor: 'grok' },
 ];
 
 interface ImportClaudeSessionsModalProps {
@@ -39,15 +42,20 @@ export function ImportClaudeSessionsModal({
   const [items, setItems] = useState<DiscoveredLocalSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [cloudError, setCloudError] = useState('');
+  const [urlValue, setUrlValue] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
+    setCloudError('');
     try {
-      setItems(await discoverLocalSessions(vendor));
+      const result = await discoverLocalSessions(vendor);
+      setItems(result.items);
+      setCloudError(result.cloud_error ?? '');
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to scan sessions');
+      setError(scanErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -89,7 +97,7 @@ export function ImportClaudeSessionsModal({
         onOpenExisting(name);
         onClose();
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : 'Import failed');
+        setError(scanErrorMessage(e, 'Import failed'));
       } finally {
         setBusyId(null);
       }
@@ -97,12 +105,30 @@ export function ImportClaudeSessionsModal({
     [onClose, onImport, onOpenExisting],
   );
 
+  const handleUrlImport = useCallback(async () => {
+    const ref = urlValue.trim();
+    if (!ref) return;
+    setBusyId('url');
+    setError('');
+    try {
+      const name = await onImport(ref, 'claude_cloud');
+      onOpenExisting(name);
+      onClose();
+    } catch (e: unknown) {
+      setError(scanErrorMessage(e, 'Import failed'));
+    } finally {
+      setBusyId(null);
+    }
+  }, [onClose, onImport, onOpenExisting, urlValue]);
+
   const blurb =
     vendor === 'codex'
       ? 'שיחות Codex מ- ~/.codex. פתיחה ממשיכה עם exec resume / app-server.'
       : vendor === 'antigravity'
         ? 'agy CLI ניתן ל-resume. שיחות IDE מיובאות כסיכום אלא אם אותו id נפתח ב-agy.'
-        : 'שיחות Claude Code ודסקטופ מקומי. פתיחה ממשיכה את השיחה אצלנו.';
+        : vendor === 'grok'
+          ? 'שיחות Grok מ- ~/.grok/sessions. כולל כלי דפדפן: browser-control (Chrome שלך), chrome-devtools, playwright. Grok Bot במשימות מתוזמנות רץ עם --always-approve.'
+          : 'שיחות מקומיות מהדיסק, ושיחות Claude Code Cloud מ-claude.ai/code (כמו --teleport).';
 
   return (
     <div
@@ -114,7 +140,7 @@ export function ImportClaudeSessionsModal({
     >
       <div className="flex max-h-[80vh] w-[420px] flex-col rounded-lg border border-line bg-surface-overlay shadow-modal dark:shadow-modal-dark">
         <div className="flex items-center justify-between px-4 py-3">
-          <h2 className="text-sm font-semibold text-fg">סשנים במכונה</h2>
+          <h2 className="text-sm font-semibold text-fg">המשך שיחה</h2>
           <div className="flex items-center gap-1">
             <button
               onClick={() => void load()}
@@ -133,7 +159,7 @@ export function ImportClaudeSessionsModal({
             </button>
           </div>
         </div>
-        <div className="mx-4 mb-2 grid grid-cols-3 gap-0.5 rounded-md border border-line p-0.5">
+        <div className="mx-4 mb-2 grid grid-cols-4 gap-0.5 rounded-md border border-line p-0.5">
           {VENDORS.map((v) => (
             <button
               key={v.id}
@@ -151,6 +177,32 @@ export function ImportClaudeSessionsModal({
 
         {error && (
           <p className="mx-4 mb-2 rounded-md bg-danger-subtle px-3 py-2 text-xs text-danger">{error}</p>
+        )}
+        {vendor === 'claude' && cloudError && (
+          <p className="mx-4 mb-2 rounded-md bg-warning-subtle px-3 py-2 text-xs text-warning">{cloudError}</p>
+        )}
+        {vendor === 'claude' && (
+          <form
+            className="mx-4 mb-2 flex gap-1"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleUrlImport();
+            }}
+          >
+            <input
+              value={urlValue}
+              onChange={(e) => setUrlValue(e.target.value)}
+              placeholder="claude.ai/code/session_… או id"
+              className="min-w-0 flex-1 rounded-md border border-line bg-surface px-2 py-1 text-2xs text-fg placeholder:text-fg-subtle"
+            />
+            <button
+              type="submit"
+              disabled={!urlValue.trim() || busyId === 'url'}
+              className="flex-shrink-0 rounded-md bg-signal px-2 py-1 text-2xs font-medium text-signal-contrast disabled:opacity-40"
+            >
+              {busyId === 'url' ? '…' : 'פתח'}
+            </button>
+          </form>
         )}
 
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
@@ -182,6 +234,16 @@ export function ImportClaudeSessionsModal({
   );
 }
 
+function scanErrorMessage(e: unknown, fallback = 'Failed to scan sessions'): string {
+  if (e instanceof Error) {
+    if (e.name === 'AbortError' || /aborted/i.test(e.message)) {
+      return 'הטעינה ארכה יותר מדי. נסה שוב, או הדבק URL של claude.ai/code.';
+    }
+    return e.message || fallback;
+  }
+  return fallback;
+}
+
 function DiscoverRow({
   item,
   busy,
@@ -197,8 +259,12 @@ function DiscoverRow({
   const action = imported
     ? 'עבור לסשן'
     : item.can_resume
-      ? 'פתח ב-DevScope'
-      : 'פתח עם סיכום';
+      ? item.source === 'claude_cloud'
+        ? 'המשך מהענן'
+        : 'פתח ב-DevScope'
+      : item.seed_summary
+        ? 'פתח עם סיכום'
+        : 'חסר ריפו';
 
   return (
     <div className="mb-0.5 flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface-raised">

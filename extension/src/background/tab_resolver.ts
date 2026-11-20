@@ -90,6 +90,14 @@ export async function resolveTab(
   }
 
   if (!raw) {
+    const [focused] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (focused?.id && !isRestrictedUrl(focused.url)) {
+      raw = focused;
+      source = 'active';
+    }
+  }
+
+  if (!raw) {
     raw = await getActiveTab();
     source = 'active';
     if (!raw) {

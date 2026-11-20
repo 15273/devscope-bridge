@@ -38,6 +38,8 @@ def _cli_home(tmp_path):
 
 @pytest.fixture(autouse=True)
 def isolated(tmp_path, monkeypatch):
+    import devscope_bridge.claude_cloud_sessions as cloud
+
     monkeypatch.setattr(store, "SESSIONS_FILE", tmp_path / "sessions.json")
     monkeypatch.setattr(store, "BRIDGE_DIR", tmp_path)
     monkeypatch.setattr(store, "DEFAULT_CWD", str(tmp_path))
@@ -45,6 +47,11 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(index, "default_claude_home", lambda: home)
     monkeypatch.setattr(index, "default_desktop_code_root", lambda: tmp_path / "no-code")
     monkeypatch.setattr(index, "default_desktop_local_root", lambda: tmp_path / "no-local")
+
+    async def no_cloud(**_kw):
+        return [], None
+
+    monkeypatch.setattr(cloud, "fetch_cloud_sessions", no_cloud)
     return sid
 
 
@@ -141,3 +148,189 @@ def test_transcript_path_uses_config_dir(tmp_path, monkeypatch):
         claude_config_dir=str(isolated),
     )
     assert store.transcript_path("dl-aaaaaaaa") == str(jsonl)
+
+
+def _cloud_item(**overrides):
+    from devscope_bridge.claude_session_index import SOURCE_CLAUDE_CLOUD, DiscoveredSession
+
+    base = dict(
+        session_id="session_01LIVE",
+        title="Fix auth",
+        cwd="/tmp/app",
+        source=SOURCE_CLAUDE_CLOUD,
+        last_used="2026-09-02T11:00:00Z",
+        can_resume=True,
+        already_imported=False,
+        bridge_name=None,
+    )
+    base.update(overrides)
+    return DiscoveredSession(**base)
+
+
+@pytest.mark.asyncio
+async def test_discover_includes_cloud_sessions(isolated, monkeypatch):
+    import devscope_bridge.claude_cloud_sessions as cloud
+
+    async def fake_fetch(**_kw):
+        return [_cloud_item()], None
+
+    monkeypatch.setattr(cloud, "fetch_cloud_sessions", fake_fetch)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+        resp = await client.get(
+            "/claude-sessions/discover",
+            headers={"Authorization": "Bearer test-token-abc123"},
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    sources = {i["source"] for i in body["items"]}
+    assert "claude_code" in sources
+    assert "claude_cloud" in sources
+    assert body.get("cloud_error") in (None, "")
+
+
+@pytest.mark.asyncio
+async def test_discover_keeps_local_when_cloud_fails(isolated, monkeypatch):
+    import devscope_bridge.claude_cloud_sessions as cloud
+
+    async def fake_fetch(**_kw):
+        return [], "Sign in with claude.ai"
+
+    monkeypatch.setattr(cloud, "fetch_cloud_sessions", fake_fetch)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+        resp = await client.get(
+            "/claude-sessions/discover",
+            headers={"Authorization": "Bearer test-token-abc123"},
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["cloud_error"] == "Sign in with claude.ai"
+    assert any(i["source"] == "claude_code" for i in body["items"])
+
+
+@pytest.mark.asyncio
+async def test_discover_keeps_local_when_cloud_times_out(isolated, monkeypatch):
+    import asyncio
+    import devscope_bridge.claude_cloud_sessions as cloud
+
+    async def hang(**_kw):
+        await asyncio.sleep(60)
+        return [], None
+
+    monkeypatch.setattr(cloud, "fetch_cloud_sessions", hang)
+    monkeypatch.setattr(
+        "devscope_bridge.session_http.CLOUD_DISCOVER_TIMEOUT_S", 0.05
+    )
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+        resp = await client.get(
+            "/claude-sessions/discover",
+            headers={"Authorization": "Bearer test-token-abc123"},
+            timeout=15,
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "ארכה יותר מדי" in (body.get("cloud_error") or "")
+    assert any(i["source"] == "claude_code" for i in body["items"])
+
+
+@pytest.mark.asyncio
+async def test_import_cloud_teleports_then_persists(isolated, tmp_path, monkeypatch):
+    import devscope_bridge.claude_cloud_sessions as cloud
+
+    local_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+    async def fake_fetch_one(_sid):
+        return {
+            "id": "session_01LIVE",
+            "title": "Fix auth",
+            "config": {
+                "sources": [
+                    {"type": "git_repository", "url": "https://github.com/Acme/App.git"}
+                ]
+            },
+        }
+
+    def fake_prepare(_session, **_kw):
+        return str(tmp_path / "app"), "session_01LIVE"
+
+    def fake_teleport(session_id, cwd):
+        assert session_id == "session_01LIVE"
+        assert cwd == str(tmp_path / "app")
+        return local_id
+
+    monkeypatch.setattr(cloud, "fetch_cloud_session", fake_fetch_one)
+    monkeypatch.setattr(cloud, "prepare_cloud_teleport", fake_prepare)
+    monkeypatch.setattr(cloud, "run_teleport", fake_teleport)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+        first = await client.post(
+            "/claude-sessions/import",
+            json={"session_id": "https://claude.ai/code/session_01LIVE", "source": "claude_cloud"},
+            headers={"Authorization": "Bearer test-token-abc123"},
+        )
+        assert first.status_code == 201
+        body = first.json()
+        assert body["session_id"] == local_id
+        assert body["origin"] == "claude_cloud"
+        assert body["display_title"] == "Fix auth"
+        assert body["cwd"] == str(tmp_path / "app")
+        assert body["name"].startswith("cr-")
+        stored = store.get_session(body["name"])
+        assert stored is not None
+        assert stored.get("origin_ref") == "session_01LIVE"
+        assert store.session_ref_owner("session_01LIVE") == body["name"]
+
+        again = await client.post(
+            "/claude-sessions/import",
+            json={"session_id": "session_01LIVE", "source": "claude_cloud"},
+            headers={"Authorization": "Bearer test-token-abc123"},
+        )
+        assert again.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_import_cloud_dirty_git_is_422(isolated, monkeypatch):
+    import devscope_bridge.claude_cloud_sessions as cloud
+    from devscope_bridge.claude_cloud_sessions import CloudTeleportError
+
+    async def fake_fetch_one(_sid):
+        return {"id": "session_01LIVE", "title": "Fix auth"}
+
+    def fake_prepare(_session, **_kw):
+        raise CloudTeleportError("uncommitted changes in /tmp/app")
+
+    monkeypatch.setattr(cloud, "fetch_cloud_session", fake_fetch_one)
+    monkeypatch.setattr(cloud, "prepare_cloud_teleport", fake_prepare)
+    monkeypatch.setattr(cloud, "run_teleport", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("teleport")))
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+        resp = await client.post(
+            "/claude-sessions/import",
+            json={"session_id": "session_01LIVE", "source": "claude_cloud"},
+            headers={"Authorization": "Bearer test-token-abc123"},
+        )
+    assert resp.status_code == 422
+    assert "uncommitted" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_import_cloud_unknown_is_404(isolated, monkeypatch):
+    import devscope_bridge.claude_cloud_sessions as cloud
+    from devscope_bridge.claude_cloud_sessions import CloudNotFoundError
+
+    async def fake_fetch_one(_sid):
+        raise CloudNotFoundError("Session not found")
+
+    monkeypatch.setattr(cloud, "fetch_cloud_session", fake_fetch_one)
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
+        resp = await client.post(
+            "/claude-sessions/import",
+            json={"session_id": "session_01MISSING", "source": "claude_cloud"},
+            headers={"Authorization": "Bearer test-token-abc123"},
+        )
+    assert resp.status_code == 404

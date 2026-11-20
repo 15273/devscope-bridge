@@ -116,16 +116,16 @@ export function SessionSidebar({
           </button>
           <button
             onClick={onImportClaude}
-            aria-label="Import local agent sessions"
-            title="ייבוא Claude / Codex / Antigravity"
+            aria-label="Resume a conversation"
+            title="המשך שיחה — מקומי או מהענן"
             className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-colors duration-fast ease-tool hover:bg-surface-overlay hover:text-signal"
           >
             <HardDrive size={15} strokeWidth={2} />
           </button>
           <button
             onClick={onNewChat}
-            aria-label="New chat"
-            title="New chat"
+            aria-label="שיחה חדשה"
+            title="שיחה חדשה (⌘K)"
             className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted transition-colors duration-fast ease-tool hover:bg-surface-overlay hover:text-signal"
           >
             <Plus size={16} strokeWidth={2} />
@@ -134,6 +134,14 @@ export function SessionSidebar({
       </div>
 
       <div className="mx-3 border-t border-line" />
+      <button
+        type="button"
+        onClick={onNewChat}
+        className="mx-2 mt-1.5 flex items-center justify-center gap-1 rounded-md border border-line bg-surface px-2 py-1.5 text-2xs font-medium text-fg transition-colors duration-fast ease-tool hover:border-signal hover:text-signal"
+      >
+        <Plus size={12} strokeWidth={2.5} />
+        שיחה חדשה
+      </button>
 
       <div role="listbox" aria-label="Sessions" className="flex-1 overflow-y-auto px-1.5 py-1.5">
         {groups.length === 0 ? (

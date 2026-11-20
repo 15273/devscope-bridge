@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Globe, ChevronDown } from 'lucide-react';
 import type { BoundTab, BrowserTabSummary } from '@/shared/tabBinding';
-import { loadBoundTab, shortTabLabel } from '@/shared/tabBinding';
+import { clearBoundTab, loadBoundTab, shortTabLabel } from '@/shared/tabBinding';
 import { bindTabById, listTabsViaBackground } from '../../utils/autoBindTab';
 import { AnchorPopover } from './AnchorPopover';
 
@@ -37,7 +37,8 @@ export function BoundTabPill({ sessionName, onBoundChange }: BoundTabPillProps) 
         onBoundChange?.(b);
         return;
       } catch {
-        setBound(b);
+        await clearBoundTab(sessionName);
+        setBound(null);
         setStale(true);
         onBoundChange?.(null);
         return;

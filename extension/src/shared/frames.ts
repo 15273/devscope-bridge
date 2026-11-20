@@ -3,7 +3,7 @@
  *
  * Extension → Bridge
  */
-export type Agent = 'claude' | 'cursor' | 'codex' | 'antigravity';
+export type Agent = 'claude' | 'cursor' | 'codex' | 'antigravity' | 'grok' | 'grok_bot';
 
 /** Operational mode — maps to claude/cursor CLI flags + system-prompt presets. */
 export type AgentMode = 'act' | 'plan' | 'inspect' | 'test';
@@ -430,12 +430,14 @@ export interface CreateSessionPayload {
   purpose?: string;
 }
 
-export type ClaudeSessionSource = 'claude_code' | 'desktop_code' | 'desktop_local';
+export type ClaudeSessionSource = 'claude_code' | 'desktop_code' | 'desktop_local' | 'claude_cloud';
 export type LocalSessionSource =
   | ClaudeSessionSource
   | 'codex'
   | 'antigravity_cli'
-  | 'antigravity_ide';
+  | 'antigravity_ide'
+  | 'grok'
+  | 'grok_bot';
 
 export interface DiscoveredClaudeSession {
   session_id: string;

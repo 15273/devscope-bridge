@@ -30,6 +30,15 @@ DEVSCOPE_SERVER_IDS = frozenset({
     "meta-ads-control",
 })
 
+GROK_BROWSER_SERVERS = (
+    (
+        "browser-control",
+        [str(REPO_ROOT / ".venv" / "bin" / "python"), "-m", "devscope_bridge.browser_mcp_server"],
+    ),
+    ("chrome-devtools", ["npx", "-y", "chrome-devtools-mcp@1.8.0"]),
+    ("playwright", ["npx", "-y", "@playwright/mcp@latest"]),
+)
+
 
 def _claude_bin() -> str:
     claude = shutil.which("claude")
@@ -101,6 +110,22 @@ def main() -> None:
         added += 1
 
     print(f"\nDone — added {added}, skipped {skipped}. Verify: claude mcp list")
+    _setup_grok()
+
+
+def _setup_grok() -> None:
+    grok = shutil.which("grok")
+    if not grok:
+        print("skip grok: grok CLI not on PATH")
+        return
+    listed = subprocess.check_output([grok, "mcp", "list"], text=True, stderr=subprocess.STDOUT)
+    for name, argv in GROK_BROWSER_SERVERS:
+        if name in listed:
+            print(f"ok   grok {name}: already registered")
+            continue
+        cmd = [grok, "mcp", "add", "-s", "user", name, "--", *argv]
+        print(f"add  grok {name}")
+        subprocess.check_call(cmd, cwd=str(REPO_ROOT))
 
 
 if __name__ == "__main__":

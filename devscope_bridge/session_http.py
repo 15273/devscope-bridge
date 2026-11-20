@@ -42,6 +42,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Cloud listing is optional; never block local discover on a hung Anthropic call.
+CLOUD_DISCOVER_TIMEOUT_S = 8.0
+
 
 @router.get("/capabilities")
 async def get_capabilities(auth: None = Depends(require_auth)) -> dict:
@@ -132,27 +135,39 @@ async def create_session(
     )
 
 
+def _discovered_claude(item) -> DiscoveredClaudeSession:
+    return DiscoveredClaudeSession(
+        session_id=item.session_id,
+        title=item.title,
+        cwd=item.cwd,
+        source=item.source,
+        last_used=item.last_used,
+        can_resume=item.can_resume,
+        already_imported=item.already_imported,
+        bridge_name=item.bridge_name,
+        config_dir=item.config_dir,
+    )
+
+
 @router.get("/claude-sessions/discover", response_model=DiscoverClaudeSessionsResponse)
 async def discover_claude_sessions(auth: None = Depends(require_auth)) -> DiscoverClaudeSessionsResponse:
-    """List Claude Code / Desktop sessions on disk. On-demand — not the poll path."""
+    """List Claude Code / Desktop (disk) and cloud (claude.ai/code) sessions."""
+    from devscope_bridge import claude_cloud_sessions as cloud
     from devscope_bridge import claude_session_index as index
 
     items = await asyncio.to_thread(index.discover_sessions)
+    cwds = [str(entry.get("cwd") or "") for entry in session_store.load_sessions().values()]
+    cwds.extend(item.cwd for item in items if item.cwd)
+    try:
+        cloud_items, cloud_error = await asyncio.wait_for(
+            cloud.fetch_cloud_sessions(candidate_cwds=[c for c in cwds if c]),
+            timeout=CLOUD_DISCOVER_TIMEOUT_S,
+        )
+    except asyncio.TimeoutError:
+        cloud_items, cloud_error = [], "רשימת הענן ארכה יותר מדי — אפשר להדביק URL או לנסות שוב."
     return DiscoverClaudeSessionsResponse(
-        items=[
-            DiscoveredClaudeSession(
-                session_id=item.session_id,
-                title=item.title,
-                cwd=item.cwd,
-                source=item.source,
-                last_used=item.last_used,
-                can_resume=item.can_resume,
-                already_imported=item.already_imported,
-                bridge_name=item.bridge_name,
-                config_dir=item.config_dir,
-            )
-            for item in items
-        ]
+        items=[_discovered_claude(item) for item in (*items, *cloud_items)],
+        cloud_error=cloud_error,
     )
 
 
@@ -162,7 +177,35 @@ async def import_claude_session(
     auth: None = Depends(require_auth),
 ) -> SessionInfo:
     """Attach a discovered Claude conversation as a DevScope session (no spawn)."""
+    from devscope_bridge import claude_cloud_sessions as cloud
     from devscope_bridge import claude_session_index as index
+    from devscope_bridge.claude_session_index import SOURCE_CLAUDE_CLOUD
+
+    if body.source == SOURCE_CLAUDE_CLOUD:
+        try:
+            entry = await cloud.import_cloud_session(body.session_id)
+        except cloud.CloudNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except cloud.CloudAlreadyImported as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Already imported as {exc.bridge_name}",
+            ) from exc
+        except (cloud.CloudAuthError, cloud.CloudTeleportError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return SessionInfo(
+            name=entry["name"],
+            session_id=entry["session_id"],
+            created_at=entry["created_at"],
+            last_used=entry["last_used"],
+            active=False,
+            agent=entry.get("agent"),
+            cwd=entry.get("cwd"),
+            purpose=entry.get("purpose", "chat"),
+            display_title=entry.get("display_title"),
+            origin=entry.get("origin"),
+            claude_config_dir=entry.get("claude_config_dir"),
+        )
 
     found = await asyncio.to_thread(index.lookup_session, body.session_id, body.source)
     if found is None:
@@ -316,6 +359,52 @@ async def import_antigravity_session(
         cwd=found.cwd,
         display_title=found.title,
         seed_summary=None if found.can_resume else found.seed_summary,
+    )
+    return _imported_info(entry)
+
+
+@router.get("/grok-sessions/discover", response_model=DiscoverLocalSessionsResponse)
+async def discover_grok_sessions(auth: None = Depends(require_auth)) -> DiscoverLocalSessionsResponse:
+    from devscope_bridge import grok_session_index as index
+
+    items = await asyncio.to_thread(index.discover_sessions)
+    return DiscoverLocalSessionsResponse(
+        items=[
+            DiscoveredLocalSession(
+                session_id=item.session_id,
+                title=item.title,
+                cwd=item.cwd,
+                source=item.source,
+                last_used=item.last_used,
+                can_resume=item.can_resume,
+                already_imported=item.already_imported,
+                bridge_name=item.bridge_name,
+                agent="grok",
+            )
+            for item in items
+        ]
+    )
+
+
+@router.post("/grok-sessions/import", status_code=201)
+async def import_grok_session(
+    body: LocalSessionImportRequest,
+    auth: None = Depends(require_auth),
+) -> SessionInfo:
+    from devscope_bridge import grok_session_index as index
+
+    found = await asyncio.to_thread(index.lookup_session, body.session_id)
+    if found is None:
+        raise HTTPException(status_code=404, detail="Grok session not found on disk")
+    if found.already_imported and found.bridge_name:
+        raise HTTPException(status_code=409, detail=f"Already imported as {found.bridge_name}")
+    agent = "grok_bot" if body.source == "grok_bot" else "grok"
+    entry = session_store.import_external_session(
+        session_id=found.session_id,
+        agent=agent,
+        source=found.source,
+        cwd=found.cwd,
+        display_title=found.title,
     )
     return _imported_info(entry)
 

@@ -442,6 +442,7 @@ export function App() {
                   onBoundTabChange={(tab) => setBoundTabState(activeSession.name, tab)}
                   onSendViaPty={handleTerminalSend}
                   onOpenGlossary={() => setShowGlossary(true)}
+                  onResumeSessions={() => setShowImportModal(true)}
                   onReset={() => resetSession(activeSession.name)}
                   recording={recordingState.recording}
                   recordingPending={recordingState.recordingPending}
@@ -570,6 +571,7 @@ export function App() {
                     : sendMessage
                 }
                 onOpenGlossary={() => setShowGlossary(true)}
+                onResumeSessions={() => setShowImportModal(true)}
                 onReset={resetSession}
                 onBoundTabChange={(tab) => setBoundTabState(activeSession.name, tab)}
                 recording={recordingState.recording}
@@ -684,7 +686,7 @@ function EmptyState({ onNewChat }: { onNewChat: () => void }) {
       <div className="space-y-1.5">
         <p className="text-lg font-semibold tracking-tight text-fg">Your AI dev agent, right here.</p>
         <p className="text-sm leading-[1.55] text-fg-muted">
-          Connect a Claude or Cursor session and chat with your codebase while you browse.
+          פתח שיחה חדשה עם Grok, Claude או Cursor — או ייבא שיחה קיימת מהדיסק ומהענן.
         </p>
       </div>
       <div className="flex flex-col items-center gap-1.5">
@@ -692,7 +694,7 @@ function EmptyState({ onNewChat }: { onNewChat: () => void }) {
           onClick={onNewChat}
           className="flex h-10 items-center gap-1.5 rounded-md bg-signal px-5 text-sm font-medium text-signal-contrast transition-colors duration-fast ease-tool hover:bg-signal-hover"
         >
-          Create your first chat
+          שיחה חדשה
         </button>
         <span className="text-2xs text-fg-subtle">or press ⌘K</span>
       </div>

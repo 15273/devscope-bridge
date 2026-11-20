@@ -10,6 +10,7 @@
  * Service worker must NOT re-forward those messages (would duplicate handling).
  */
 
+import { markTabControlled } from './agent_action_feedback';
 import { executeBrowserTool, pickElement } from './browser_tools';
 import {
   handleAnnotationAttached,
@@ -289,6 +290,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     getProfileIdentity()
       .then(({ profileId, profileLabel }) => sendResponse({ ok: true, profileId, profileLabel }))
       .catch((err: unknown) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (msg?.kind === 'mark_tab_controlled') {
+    const tabId = (msg as { tabId?: number }).tabId;
+    if (typeof tabId === 'number') {
+      void markTabControlled(tabId);
+    }
+    sendResponse({ ok: true });
     return true;
   }
 

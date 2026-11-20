@@ -1,0 +1,21 @@
+# Grok / Grok Bot in DevScope: same browser tools this agent uses.
+# browser-control drives the user's real Chrome via the DevScope extension.
+# chrome-devtools and playwright are extra automation backends.
+
+[mcp_servers.browser-control]
+command = "python3"
+args = ["-m", "devscope_bridge.browser_mcp_server"]
+enabled = true
+startup_timeout_sec = 30
+
+[mcp_servers.chrome-devtools]
+command = "npx"
+args = ["-y", "chrome-devtools-mcp@1.8.0"]
+enabled = true
+startup_timeout_sec = 60
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest"]
+enabled = true
+startup_timeout_sec = 60

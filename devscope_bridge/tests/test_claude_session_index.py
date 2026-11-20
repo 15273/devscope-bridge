@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from devscope_bridge.claude_session_index import (
+    SOURCE_CLAUDE_CLOUD,
     SOURCE_CLAUDE_CODE,
     SOURCE_DESKTOP_CODE,
     SOURCE_DESKTOP_LOCAL,
@@ -197,6 +198,7 @@ def test_lookup_and_slug(tmp_path):
     assert found is not None
     assert import_slug(SOURCE_CLAUDE_CODE, found.session_id) == "cc-aaaaaaaa"
     assert allocate_import_name(SOURCE_CLAUDE_CODE, found.session_id, {"cc-aaaaaaaa"}) == "cc-aaaaaaaa-2"
+    assert import_slug(SOURCE_CLAUDE_CLOUD, "session_01RyZ89nysBFFZnqFMZ4KpkZ") == "cr-01ryz89n"
 
 
 def test_import_persists_session_id(tmp_path, monkeypatch):

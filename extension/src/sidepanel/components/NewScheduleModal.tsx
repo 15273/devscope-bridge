@@ -87,7 +87,7 @@ export function NewScheduleModal({
   const [instruction, setInstruction] = useState('');
   const [domain, setDomain] = useState<string>('browser');
   const [entryUrl, setEntryUrl] = useState('');
-  const [agent, setAgent] = useState<Agent>('claude');
+  const [agent, setAgent] = useState<Agent>('grok_bot');
   const [setupMode, setSetupMode] = useState<AgentMode>('inspect');
   const [runtimeMode, setRuntimeMode] = useState<AgentMode>('act');
   const [recurrence, setRecurrence] = useState<Recurrence>('daily');
@@ -353,6 +353,11 @@ export function NewScheduleModal({
           {step === 'מטרה' && (
             <>
               <EnginePicker agent={agent} onChange={setAgent} />
+              {agent === 'grok_bot' && (
+                <p className="text-2xs leading-snug text-fg-muted">
+                  Grok Bot רץ לבד בזמן שנקבע, בלי לבקש אישור לכל כלי. מתאים למשימות חוזרות.
+                </p>
+              )}
               <button
                 type="button"
                 onClick={applyLinkedInWatch}
@@ -602,7 +607,7 @@ function EnginePicker({ agent, onChange }: { agent: Agent; onChange: (a: Agent) 
   return (
     <div className="flex items-center gap-2">
       <span className="text-2xs font-medium text-fg-muted">מנוע</span>
-      <div className="grid flex-1 grid-cols-2 gap-0.5 rounded-md border border-line bg-surface p-0.5">
+      <div className="grid flex-1 grid-cols-3 gap-0.5 rounded-md border border-line bg-surface p-0.5">
         {AGENTS.map((a) => (
           <button
             key={a}

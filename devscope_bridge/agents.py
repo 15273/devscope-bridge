@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-VALID_AGENTS = frozenset({"claude", "cursor", "codex", "antigravity"})
-ONESHOT_AGENTS = frozenset({"cursor", "codex", "antigravity"})
+VALID_AGENTS = frozenset({"claude", "cursor", "codex", "antigravity", "grok", "grok_bot"})
+ONESHOT_AGENTS = frozenset({"cursor", "codex", "antigravity", "grok", "grok_bot"})
 KEEP_ID_ON_RESET = ONESHOT_AGENTS
 
 AGENT_LABELS = {
@@ -11,11 +11,14 @@ AGENT_LABELS = {
     "cursor": "Cursor",
     "codex": "Codex",
     "antigravity": "Antigravity",
+    "grok": "Grok",
+    "grok_bot": "Grok Bot",
 }
 
 SOURCE_CODEX = "codex"
 SOURCE_ANTIGRAVITY_CLI = "antigravity_cli"
 SOURCE_ANTIGRAVITY_IDE = "antigravity_ide"
+SOURCE_GROK = "grok"
 
 
 def parse_agent(value: object, fallback: str = "claude") -> str:

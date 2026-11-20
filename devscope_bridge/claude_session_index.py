@@ -27,11 +27,13 @@ _UUID_RE = re.compile(
 SOURCE_CLAUDE_CODE = "claude_code"
 SOURCE_DESKTOP_CODE = "desktop_code"
 SOURCE_DESKTOP_LOCAL = "desktop_local"
+SOURCE_CLAUDE_CLOUD = "claude_cloud"
 
 _SLUG_PREFIX = {
     SOURCE_CLAUDE_CODE: "cc",
     SOURCE_DESKTOP_CODE: "dc",
     SOURCE_DESKTOP_LOCAL: "dl",
+    SOURCE_CLAUDE_CLOUD: "cr",
 }
 
 
@@ -70,7 +72,15 @@ def default_desktop_local_root() -> Path:
 
 def import_slug(source: str, session_id: str) -> str:
     prefix = _SLUG_PREFIX.get(source, "cc")
-    hex8 = session_id.replace("-", "")[:8].lower()
+    compact = session_id.replace("-", "")
+    if source == SOURCE_CLAUDE_CLOUD:
+        compact = re.sub(r"[^A-Za-z0-9]", "", session_id)
+        lowered = compact.lower()
+        for lead in ("session", "cse"):
+            if lowered.startswith(lead):
+                compact = compact[len(lead):]
+                break
+    hex8 = compact[:8].lower()
     return f"{prefix}-{hex8}"
 
 

@@ -20,7 +20,9 @@ from typing import Any, Protocol
 
 from devscope_bridge import cursor_watchdog
 from devscope_bridge import session_store
-from devscope_bridge.models import AgentActivity, AiChunk, AiDone, AiError, SessionReady, TurnState
+from devscope_bridge.models import (
+    AgentActivity, AiChunk, AiDone, AiError, SessionReady, ThinkingChunk, TurnState,
+)
 from devscope_bridge.session_runtime import subscription_env
 
 logger = logging.getLogger(__name__)
@@ -230,15 +232,20 @@ def _run_blocking(
     )
     capture = backend.capture_before(turn.cwd)
     logger.info("oneshot %s session=%s cmd0=%s", backend.agent, session_name, cmd[0])
-
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        cwd=turn.cwd if os.path.isdir(turn.cwd) else None,
-        env=backend.env(session_name, turn.cwd),
-    )
+    cleanup = getattr(backend, "cleanup_turn", None)
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=turn.cwd if os.path.isdir(turn.cwd) else None,
+            env=backend.env(session_name, turn.cwd),
+        )
+    except Exception:
+        if callable(cleanup):
+            cleanup()
+        raise
     _current_proc[session_name] = proc
     stderr_buf = _spawn_stderr_drain(proc)
 
@@ -259,14 +266,21 @@ def _run_blocking(
             try:
                 obj = json.loads(stripped)
                 if isinstance(obj, dict):
-                    for label, tool, detail, status in backend.activities_from_obj(obj):
+                    thought_fn = getattr(backend, "thoughts_from_obj", None)
+                    thought = thought_fn(obj) if callable(thought_fn) else None
+                    if thought:
+                        _put(ThinkingChunk(session=session_name, text=thought))
+                        _put(AgentActivity(session=session_name, label="Thinking…"))
+                    for item in backend.activities_from_obj(obj):
+                        label, tool, detail, status = item[0], item[1], item[2], item[3]
+                        call_id = item[4] if len(item) > 4 else None
                         if status == "running":
                             cursor_watchdog.set_current_tool(session_name, tool)
                         elif status in ("done", "error"):
                             cursor_watchdog.set_current_tool(session_name, None)
                         _put(AgentActivity(
                             session=session_name, label=label, tool=tool,
-                            detail=detail, status=status,
+                            detail=detail, status=status, call_id=call_id,
                         ))
             except json.JSONDecodeError:
                 pass

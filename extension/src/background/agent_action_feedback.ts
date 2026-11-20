@@ -11,6 +11,14 @@ async function uiPrefs(): Promise<{ showClickHighlights: boolean; actionSound: b
   };
 }
 
+export async function markTabControlled(tabId: number): Promise<void> {
+  try {
+    await chrome.tabs.sendMessage(tabId, { kind: 'show_control_banner' });
+  } catch {
+    /* restricted or no content script */
+  }
+}
+
 export async function notifyAgentAction(
   tabId: number,
   selector?: string,
@@ -18,6 +26,7 @@ export async function notifyAgentAction(
   action: 'click' | 'fill' | 'hover' = 'click',
 ): Promise<void> {
   const prefs = await uiPrefs();
+  await markTabControlled(tabId);
   if (prefs.showClickHighlights) {
     try {
       await chrome.tabs.sendMessage(tabId, {

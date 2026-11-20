@@ -98,6 +98,35 @@ function showRipple(x: number, y: number): void {
   setTimeout(() => el.remove(), 700);
 }
 
+const BANNER_ID = 'devscope-control-banner';
+
+function showControlBanner(): void {
+  ensureStyles();
+  let el = document.getElementById(BANNER_ID);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = BANNER_ID;
+    el.setAttribute('data-devscope', 'control-banner');
+    Object.assign(el.style, {
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      right: '0',
+      zIndex: '2147483646',
+      background: 'rgb(232 109 19)',
+      color: '#fff',
+      font: '600 13px/18px ui-sans-serif, system-ui, sans-serif',
+      textAlign: 'center',
+      padding: '8px 12px',
+      pointerEvents: 'none',
+      boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+    } as Partial<CSSStyleDeclaration>);
+    el.textContent = 'DevScope · controlling this tab';
+    document.documentElement.appendChild(el);
+  }
+  el.style.display = 'block';
+}
+
 function centerOfSelector(selector: string): { x: number; y: number } | null {
   try {
     const node = document.querySelector(selector);
@@ -110,7 +139,13 @@ function centerOfSelector(selector: string): { x: number; y: number } | null {
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.kind === 'show_control_banner') {
+    showControlBanner();
+    sendResponse({ ok: true });
+    return true;
+  }
   if (msg?.kind !== 'show_agent_action') return;
+  showControlBanner();
   const selector = typeof msg.selector === 'string' ? msg.selector : '';
   const x = typeof msg.x === 'number' ? msg.x : null;
   const y = typeof msg.y === 'number' ? msg.y : null;

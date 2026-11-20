@@ -160,8 +160,8 @@ _BUILTIN_COMMANDS: list[dict] = [
         "name": "/teleport",
         "source": "builtin",
         "disabled": True,
-        "note": "terminal only — not available in DevScope",
-        "description": "Jump to a different context.",
+        "note": "Use /resume in the composer — it lists local and cloud sessions",
+        "description": "Pull a Claude Code cloud session — use /resume in DevScope.",
     },
     {
         "name": "/agents",

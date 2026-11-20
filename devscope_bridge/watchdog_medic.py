@@ -70,12 +70,28 @@ def _resolve_transcript_path(name: str) -> str | None:
     return None
 
 
-def collect_diagnostics(name: str, elapsed_s: float, trigger: str = "auto") -> dict:
+def _trigger_reason(trigger: str, silence_s: float) -> str:
+    """'silence' | 'turn_wall' | 'manual' — why this medic was dispatched."""
+    if trigger != "auto":
+        return "manual"
+    if silence_s >= session_reader._WATCHDOG_MEDIC_S:
+        return "silence"
+    return "turn_wall"
+
+
+def collect_diagnostics(
+    name: str, elapsed_s: float, trigger: str = "auto", turn_elapsed_s: float = 0.0,
+) -> dict:
     """Capture everything we know about a stuck session, without touching it.
 
-    trigger: "auto" (watchdog fired after _WATCHDOG_MEDIC_S of silence — the
-    session IS genuinely stuck) or "manual" (a human ran /medic on demand — the
-    session may or may not actually be stuck; check turn_done / last_output_at).
+    trigger: "auto" (watchdog fired — either after _WATCHDOG_MEDIC_S of real
+    silence, or because the turn hit the wall-clock medic cap while still
+    streaming) or "manual" (a human ran /medic on demand — the session may or
+    may not actually be stuck; check turn_done / last_output_at).
+
+    silent_for_s is the REAL silence (seconds since last stdout); turn_elapsed_s
+    is the total turn duration.  A wall-clock trigger looks like a small
+    silent_for_s with a large turn_elapsed_s.
     """
     entry = session_store.get_session(name)
     agent = (entry or {}).get("agent") or "claude"
@@ -83,7 +99,9 @@ def collect_diagnostics(name: str, elapsed_s: float, trigger: str = "auto") -> d
         "session": name,
         "agent": agent,
         "trigger": trigger,
+        "trigger_reason": _trigger_reason(trigger, elapsed_s),
         "silent_for_s": round(elapsed_s, 1),
+        "turn_elapsed_s": round(turn_elapsed_s, 1),
         "session_state": session_manager.get_session_state(name),
         "transcript_path": _resolve_transcript_path(name),
         "extension_ws_connected": browser_relay.has_active_ws(name),
@@ -118,8 +136,12 @@ _MEDIC_SYSTEM_PROMPT = (
     "4. ONLY if you find a clear code bug, fix it — editing files under "
     "devscope_bridge/ or the extension dir ONLY. Show the exact change.\n\n"
     "Interpreting the trigger:\n"
-    "- trigger=\"auto\": the watchdog fired after a long silence — the session is "
-    "genuinely stuck mid-turn.\n"
+    "- trigger=\"auto\" + trigger_reason=\"silence\": no stdout for silent_for_s — "
+    "the session is genuinely stuck mid-turn.\n"
+    "- trigger=\"auto\" + trigger_reason=\"turn_wall\": the turn hit the wall-clock "
+    "cap (turn_elapsed_s) but was still producing output silent_for_s ago. It is "
+    "probably NOT stuck — confirm via the transcript mtime / last_output_at and, "
+    "if it is progressing, just say so (long task, no action needed).\n"
     "- trigger=\"manual\": a human asked you on-demand. The session may NOT be "
     "stuck at all — check session_state.turn_done (true = idle, not stuck) and "
     "last_output_at (vs last_user_msg_at) before assuming a problem. silent_for_s "
@@ -202,8 +224,14 @@ async def run_medic(
     medic_active: asyncio.Event,
     elapsed_s: float = 0.0,
     trigger: str = "auto",
+    turn_elapsed_s: float = 0.0,
 ) -> None:
     """Spawn, stream, and supervise a medic for a stuck session.
+
+    elapsed_s: seconds of REAL silence (no stdout).  turn_elapsed_s: total turn
+    wall-clock — set when the watchdog fired on the turn-wall cap rather than
+    on silence, so the panel and the medic can tell "long but alive" from
+    "stuck".
 
     Sets ``medic_active`` for the whole run (so the hard-cap watchdog defers the
     SIGINT+respawn) and clears it in ``finally``.  One medic per session: a second
@@ -225,21 +253,30 @@ async def run_medic(
         return
     _active_medics.add(name)
     medic_active.set()
-    diagnostics = collect_diagnostics(name, elapsed_s, trigger)
+    diagnostics = collect_diagnostics(name, elapsed_s, trigger, turn_elapsed_s)
+    reason = diagnostics["trigger_reason"]
     logger.warning(
-        "Watchdog Medic starting for session '%s' (trigger=%s silent=%.0fs)",
-        name, trigger, elapsed_s,
+        "Watchdog Medic starting for session '%s' (trigger=%s reason=%s silent=%.0fs turn=%.0fs)",
+        name, trigger, reason, elapsed_s, turn_elapsed_s,
     )
     await q.put(WatchdogReport(session=name, phase="start", diagnostics=diagnostics))
-    await q.put(AgentActivity(
-        session=name, label="🩺 Medic diagnosing…",
-        detail=f"Session silent for {elapsed_s:.0f}s — investigating",
-    ))
-    await q.put(AiChunk(
-        session=name,
-        text="\n\n---\n🩺 **DevScope Watchdog Medic** — this turn went silent and looks "
-             "stuck, so I spawned a separate session to diagnose it.\n\n",
-    ))
+    if reason == "turn_wall":
+        detail = (
+            f"Turn running {turn_elapsed_s:.0f}s (last output {elapsed_s:.0f}s ago) "
+            "— checking it is still making progress"
+        )
+        intro = (
+            "\n\n---\n🩺 **DevScope Watchdog Medic** — this turn has been running a long "
+            "time, so I spawned a separate session to check it is still healthy.\n\n"
+        )
+    else:
+        detail = f"Session silent for {elapsed_s:.0f}s — investigating"
+        intro = (
+            "\n\n---\n🩺 **DevScope Watchdog Medic** — this turn went silent and looks "
+            "stuck, so I spawned a separate session to diagnose it.\n\n"
+        )
+    await q.put(AgentActivity(session=name, label="🩺 Medic diagnosing…", detail=detail))
+    await q.put(AiChunk(session=name, text=intro))
 
     proc: asyncio.subprocess.Process | None = None
     try:

@@ -17,6 +17,10 @@ const STORAGE_TOKEN_KEY = 'bridgeToken';
  * freeze a poll loop or leave the UI waiting forever (chat-reliability C2).
  */
 export const BRIDGE_FETCH_TIMEOUT_MS = 10_000;
+/** Discover scans disk + optional cloud APIs; 10s aborted the resume modal. */
+const DISCOVER_TIMEOUT_MS = 45_000;
+/** Import of a cloud session runs `claude --teleport` (git fetch/checkout). */
+const IMPORT_TIMEOUT_MS = 180_000;
 /** Compact runs an LLM summarizer server-side — allow it much longer than a poll. */
 const COMPACT_TIMEOUT_MS = 120_000;
 
@@ -313,9 +317,10 @@ export interface TranscriptResult {
  * `ok: false` distinguishes bridge failure from a genuinely empty transcript —
  * callers must surface failures (connection banner), never treat them as "no news".
  */
-export async function discoverClaudeSessions(): Promise<
-  import('@/shared/frames').DiscoveredClaudeSession[]
-> {
+export async function discoverClaudeSessions(): Promise<{
+  items: import('@/shared/frames').DiscoveredClaudeSession[];
+  cloud_error: string | null;
+}> {
   const token = await getToken();
   const res = await bridgeFetch(`${BRIDGE_HTTP}/claude-sessions/discover`, {
     headers: authHeaders(token),
@@ -323,8 +328,11 @@ export async function discoverClaudeSessions(): Promise<
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);
   }
-  const body = (await res.json()) as { items?: import('@/shared/frames').DiscoveredClaudeSession[] };
-  return body.items ?? [];
+  const body = (await res.json()) as {
+    items?: import('@/shared/frames').DiscoveredClaudeSession[];
+    cloud_error?: string | null;
+  };
+  return { items: body.items ?? [], cloud_error: body.cloud_error ?? null };
 }
 
 export async function importClaudeSessionOnBridge(
@@ -332,11 +340,15 @@ export async function importClaudeSessionOnBridge(
   source: string,
 ): Promise<import('@/shared/frames').SessionInfo> {
   const token = await getToken();
-  const res = await bridgeFetch(`${BRIDGE_HTTP}/claude-sessions/import`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
-    body: JSON.stringify({ session_id: sessionId, source }),
-  });
+  const res = await bridgeFetch(
+    `${BRIDGE_HTTP}/claude-sessions/import`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify({ session_id: sessionId, source }),
+    },
+    IMPORT_TIMEOUT_MS,
+  );
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { detail?: string };
     throw new Error(body.detail ?? `HTTP ${res.status}`);
@@ -345,23 +357,33 @@ export async function importClaudeSessionOnBridge(
 }
 
 export async function discoverLocalSessions(
-  vendor: 'claude' | 'codex' | 'antigravity',
-): Promise<import('@/shared/frames').DiscoveredLocalSession[]> {
+  vendor: 'claude' | 'codex' | 'antigravity' | 'grok',
+): Promise<{
+  items: import('@/shared/frames').DiscoveredLocalSession[];
+  cloud_error: string | null;
+}> {
   const token = await getToken();
   const path =
     vendor === 'codex'
       ? '/codex-sessions/discover'
       : vendor === 'antigravity'
         ? '/antigravity-sessions/discover'
-        : '/claude-sessions/discover';
-  const res = await bridgeFetch(`${BRIDGE_HTTP}${path}`, {
-    headers: authHeaders(token),
-  });
+        : vendor === 'grok'
+          ? '/grok-sessions/discover'
+          : '/claude-sessions/discover';
+  const res = await bridgeFetch(
+    `${BRIDGE_HTTP}${path}`,
+    { headers: authHeaders(token) },
+    DISCOVER_TIMEOUT_MS,
+  );
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);
   }
-  const body = (await res.json()) as { items?: import('@/shared/frames').DiscoveredLocalSession[] };
-  return body.items ?? [];
+  const body = (await res.json()) as {
+    items?: import('@/shared/frames').DiscoveredLocalSession[];
+    cloud_error?: string | null;
+  };
+  return { items: body.items ?? [], cloud_error: body.cloud_error ?? null };
 }
 
 export async function importLocalSessionOnBridge(
@@ -374,12 +396,18 @@ export async function importLocalSessionOnBridge(
       ? '/codex-sessions/import'
       : source === 'antigravity_cli' || source === 'antigravity_ide'
         ? '/antigravity-sessions/import'
+        : source === 'grok' || source === 'grok_bot'
+          ? '/grok-sessions/import'
         : '/claude-sessions/import';
-  const res = await bridgeFetch(`${BRIDGE_HTTP}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
-    body: JSON.stringify({ session_id: sessionId, source }),
-  });
+  const res = await bridgeFetch(
+    `${BRIDGE_HTTP}${path}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify({ session_id: sessionId, source }),
+    },
+    IMPORT_TIMEOUT_MS,
+  );
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { detail?: string };
     throw new Error(body.detail ?? `HTTP ${res.status}`);

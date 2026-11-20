@@ -86,6 +86,19 @@ def session_id_owner(session_id: str) -> str | None:
     return None
 
 
+def session_ref_owner(ref: str) -> str | None:
+    """Owner of a Claude session_id or cloud origin_ref."""
+    if not ref:
+        return None
+    owner = session_id_owner(ref)
+    if owner:
+        return owner
+    for name, entry in load_sessions().items():
+        if entry.get("origin_ref") == ref:
+            return name
+    return None
+
+
 def repair_duplicate_session_ids() -> list[str]:
     """Clear session_id on duplicate owners, keeping the most recently used entry."""
     sessions = load_sessions()
@@ -233,14 +246,18 @@ def import_claude_session(
     display_title: str | None = None,
     claude_config_dir: str | None = None,
     name: str | None = None,
+    origin_ref: str | None = None,
 ) -> dict:
     """Attach an existing Claude conversation as a DevScope session.
 
     ``session_id`` is the CLI UUID used with ``claude --resume``. If ``cwd`` is
     missing or not a directory, fall back to DEFAULT_CWD (never 422).
     If this UUID is already owned, return that entry instead of creating a duplicate.
+    ``origin_ref`` remembers a cloud session id after teleport (local id differs).
     """
-    owner = session_id_owner(session_id)
+    owner = session_id_owner(session_id) or (
+        session_ref_owner(origin_ref) if origin_ref else None
+    )
     if owner:
         entry = get_session(owner)
         if entry is not None:
@@ -250,9 +267,9 @@ def import_claude_session(
 
     resolved_cwd = cwd if cwd and os.path.isabs(cwd) and os.path.isdir(cwd) else DEFAULT_CWD
     sessions = load_sessions()
-    chosen = name or allocate_import_name(source, session_id, set(sessions))
+    chosen = name or allocate_import_name(source, origin_ref or session_id, set(sessions))
     if chosen in sessions:
-        chosen = allocate_import_name(source, session_id, set(sessions))
+        chosen = allocate_import_name(source, origin_ref or session_id, set(sessions))
     entry = {
         "session_id": session_id,
         "created_at": _now_str(),
@@ -265,6 +282,7 @@ def import_claude_session(
         "display_title": display_title,
         "origin": source,
         "claude_config_dir": claude_config_dir,
+        "origin_ref": origin_ref,
     }
     sessions[chosen] = entry
     save_sessions(sessions)
@@ -296,6 +314,7 @@ def import_external_session(
     from devscope_bridge.agents import parse_agent
     from devscope_bridge.codex_session_index import allocate_import_name as alloc_codex
     from devscope_bridge.agy_session_index import allocate_import_name as alloc_agy
+    from devscope_bridge.grok_session_index import allocate_import_name as alloc_grok
 
     resolved_cwd = cwd if cwd and os.path.isabs(cwd) and os.path.isdir(cwd) else DEFAULT_CWD
     sessions = load_sessions()
@@ -304,6 +323,8 @@ def import_external_session(
         chosen = name
     elif agent == "codex":
         chosen = alloc_codex(session_id or "unknown", taken)
+    elif agent in ("grok", "grok_bot"):
+        chosen = alloc_grok(session_id or "unknown", taken)
     else:
         chosen = alloc_agy(source, session_id or "unknown", taken)
     if chosen in sessions:

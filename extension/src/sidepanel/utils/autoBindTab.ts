@@ -8,6 +8,7 @@ import {
   loadBoundTab,
   saveBoundTab,
   tabToBound,
+  tabsMatchingTitle,
 } from '@/shared/tabBinding';
 
 export type AutoBindResult =
@@ -23,30 +24,45 @@ export async function listTabsViaBackground(): Promise<BrowserTabSummary[]> {
   return res?.tabs ?? [];
 }
 
+async function bindSummary(sessionName: string, tab: BrowserTabSummary): Promise<BoundTab> {
+  const bound: BoundTab = {
+    tabId: tab.id,
+    url: tab.url,
+    title: tab.title,
+    windowId: tab.windowId,
+    boundAt: new Date().toISOString(),
+  };
+  await saveBoundTab(sessionName, bound);
+  await chrome.runtime.sendMessage({ kind: 'mark_tab_controlled', tabId: tab.id }).catch(() => {});
+  return bound;
+}
+
 export async function autoBindTabFromText(
   sessionName: string,
   text: string,
 ): Promise<AutoBindResult> {
-  const urls = extractUrls(text);
-  if (urls.length === 0) return { status: 'none' };
-
   const tabs = await listTabsViaBackground();
+  const urls = extractUrls(text);
   for (const hintUrl of urls) {
     const matches = tabs.filter((t) => hostnameMatches(t.url, hintUrl));
     if (matches.length === 1) {
-      const bound: BoundTab = {
-        tabId: matches[0].id,
-        url: matches[0].url,
-        title: matches[0].title,
-        windowId: matches[0].windowId,
-        boundAt: new Date().toISOString(),
-      };
-      await saveBoundTab(sessionName, bound);
-      return { status: 'bound', tab: bound };
+      return { status: 'bound', tab: await bindSummary(sessionName, matches[0]) };
     }
     if (matches.length > 1) {
       return { status: 'ambiguous', candidates: matches, hintUrl };
     }
+  }
+
+  const titled = tabsMatchingTitle(text, tabs);
+  if (titled.length === 1) {
+    return { status: 'bound', tab: await bindSummary(sessionName, titled[0]) };
+  }
+  if (titled.length > 1) {
+    const canon = titled[0].url.split('?')[0];
+    if (titled.every((t) => t.url.split('?')[0] === canon || t.title === titled[0].title)) {
+      return { status: 'bound', tab: await bindSummary(sessionName, titled[0]) };
+    }
+    return { status: 'ambiguous', candidates: titled, hintUrl: titled[0].title };
   }
   return { status: 'none' };
 }
@@ -57,6 +73,7 @@ export async function bindTabById(sessionName: string, tabId: number): Promise<B
     const bound = tabToBound(tab);
     if (!bound) return null;
     await saveBoundTab(sessionName, bound);
+    await chrome.runtime.sendMessage({ kind: 'mark_tab_controlled', tabId }).catch(() => {});
     return bound;
   } catch {
     return null;
@@ -84,6 +101,7 @@ export async function bindHostWindowActiveTab(sessionName: string): Promise<Boun
   const bound = tabToBound(tab);
   if (!bound) return null;
   await saveBoundTab(sessionName, bound);
+  await chrome.runtime.sendMessage({ kind: 'mark_tab_controlled', tabId: bound.tabId }).catch(() => {});
   return bound;
 }
 

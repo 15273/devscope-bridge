@@ -126,6 +126,8 @@ interface ComposerProps {
   disabled?: boolean;
   /** Hide numbered quick-reply chips (terminal mode — PTY is source of truth). */
   hideQuickReplies?: boolean;
+  /** Open the resume/import picker (/resume, /continue, /teleport). */
+  onResumeSessions?: () => void;
 }
 
 export function Composer({
@@ -146,6 +148,7 @@ export function Composer({
   onToggleRecording,
   disabled = false,
   hideQuickReplies = false,
+  onResumeSessions,
 }: ComposerProps) {
   const [value, setValue] = useState('');
   const [annotating, setAnnotating] = useState(false);
@@ -331,6 +334,13 @@ export function Composer({
     if (speech.isListening) stopDictationRef.current();
     const text = value.trim();
     if (disabled || (!text && !hasContext)) return;
+    const slash = text.split(/\s+/)[0]?.toLowerCase();
+    if (slash === '/resume' || slash === '/continue' || slash === '/teleport') {
+      setValue('');
+      setSlashDismissed(true);
+      onResumeSessions?.();
+      return;
+    }
     const context: MessageContext | undefined = hasContext
       ? { elements, attachments }
       : undefined;
@@ -341,7 +351,7 @@ export function Composer({
     });
     clearAll();
     dictationBaseRef.current = '';
-  }, [value, disabled, hasContext, elements, attachments, mode, model, onSend, clearAll, speech]);
+  }, [value, disabled, hasContext, elements, attachments, mode, model, onSend, onResumeSessions, clearAll, speech]);
 
   const handleToggleDictation = useCallback(() => {
     if (!speech.isSupported || disabled) return;
@@ -501,7 +511,7 @@ export function Composer({
   const slashItems: SlashCommand[] =
     slashQuery === null
       ? []
-      : [...NATIVE_COMMANDS, ...commands].filter((c) => {
+      : [...NATIVE_COMMANDS, ...commands.filter((c) => !NATIVE_COMMANDS.some((n) => n.name === c.name))].filter((c) => {
           // Consumer product mode hides dev-workflow commands; Pro shows all.
           if (uiPrefs.productMode === 'consumer' && c.advanced_only) return false;
           if (c.name.slice(1).toLowerCase().startsWith(slashQuery)) return true;
@@ -534,6 +544,8 @@ export function Composer({
         else if (cmd.action === 'clear') {
           setElements([]);
           setAttachments([]);
+        } else if (cmd.action === 'resume') {
+          onResumeSessions?.();
         }
         return;
       }
@@ -564,7 +576,7 @@ export function Composer({
       setSlashDismissed(true);
       textareaRef.current?.focus();
     },
-    [changeMode, startAnnotating, runAttach, onOpenGlossary, onSend, onReset, mode, messages],
+    [changeMode, startAnnotating, runAttach, onOpenGlossary, onSend, onReset, onResumeSessions, mode, messages],
   );
 
   const handleKeyDown = useCallback(
